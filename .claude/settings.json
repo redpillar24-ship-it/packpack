@@ -1,0 +1,12 @@
+{
+  "language": "korean",
+  "model": "haiku",
+  "permissions": {
+    "allow": [
+      "Read",
+      "Write",
+      "Edit",
+      "Bash"
+    ]
+  }
+}
