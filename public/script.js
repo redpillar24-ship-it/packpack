@@ -8,7 +8,25 @@ const STORAGE = {
   PACKS: 'packpack_packs',
 };
 
-const CATEGORIES = ['쉘터', '침낭', '매트', '의류', '신발', '전자기기', '조리', '기타'];
+const CATEGORIES = ['배낭', '쉘터', '침낭', '매트', '의류', '신발', '전자기기', '조리', '기타'];
+
+// 자동채우기로 가져온 제품명/설명 텍스트로 카테고리 추측 (키워드 매칭, 못 맞추면 null)
+const CATEGORY_KEYWORDS = [
+  ['배낭', /배낭|백팩|팩\b|pack|backpack|rucksack/i],
+  ['쉘터', /텐트|타프|쉘터|tent|tarp|shelter/i],
+  ['침낭', /침낭|퀼트|sleeping\s*bag|quilt/i],
+  ['매트', /매트|에어매트|패드|pad\b|mat\b|mattress/i],
+  ['신발', /신발|등산화|샌들|shoes?|boots?|sandals?/i],
+  ['전자기기', /랜턴|헤드램프|배터리|전자|gps|light\b|lantern|headlamp|battery|power\s*bank/i],
+  ['조리', /버너|코펠|스토브|조리|식기|stove|cookware|burner/i],
+  ['의류', /자켓|재킷|바지|장갑|모자|의류|우모복|다운|jacket|pants|glove|down\b|shirt|hoodie/i],
+];
+
+function guessCategory(text) {
+  if (!text) return null;
+  const match = CATEGORY_KEYWORDS.find(([, re]) => re.test(text));
+  return match ? match[0] : null;
+}
 
 // ============================================
 // 상태
@@ -172,6 +190,7 @@ function renderInventoryView(filter = '') {
       e.stopPropagation();
       deleteGear(g.id);
     });
+    card.addEventListener('click', () => openAddGearModal(g));
     grid.appendChild(card);
     fadeInEl(card);
   });
@@ -302,7 +321,7 @@ function renderChart(items) {
       datasets: [
         {
           data: Object.values(byCategory),
-          backgroundColor: ['#c2603d', '#4e8c6b', '#6b7fd7', '#c99a2e', '#8b5cf6', '#2f7a6b', '#c1443a', '#8a8578'],
+          backgroundColor: ['#5b8fb0', '#c2603d', '#4e8c6b', '#6b7fd7', '#c99a2e', '#8b5cf6', '#2f7a6b', '#c1443a', '#8a8578'],
           borderWidth: 0,
         },
       ],
@@ -505,9 +524,35 @@ function renderDropZone(items, packId) {
 }
 
 // ============================================
-// 장비 추가 모달
+// 장비 추가/수정 모달
 // ============================================
-function openAddGearModal() {
+let autoFillImage = null;
+let editingGearId = null; // null이면 새 장비 추가, 있으면 그 장비 수정 중
+
+function openAddGearModal(gear = null) {
+  editingGearId = gear ? gear.id : null;
+
+  $('#gearModalTitle').textContent = gear ? '장비 수정' : '장비 추가';
+  $('#gearSubmitBtn').textContent = gear ? '저장' : '추가';
+  $('#deleteGearBtn').hidden = !gear;
+
+  if (gear) {
+    $('#linkInput').value = gear.source_url || '';
+    $('#nameInput').value = gear.name;
+    $('#categoryInput').value = gear.category;
+    $('#weightInput').value = gear.weight;
+    $('#priceInput').value = gear.price_krw;
+    autoFillImage = gear.image || null;
+
+    const viewLink = $('#viewSourceLink');
+    if (gear.source_url) {
+      viewLink.href = gear.source_url;
+      viewLink.hidden = false;
+    } else {
+      viewLink.hidden = true;
+    }
+  }
+
   $('#addGearModal').hidden = false;
   const modal = $('.modal-content');
   animate(modal, { opacity: [0, 1], transform: ['scale(0.96)', 'scale(1)'] }, { duration: 0.18, easing: 'ease-out' });
@@ -517,10 +562,23 @@ function closeAddGearModal() {
   $('#addGearModal').hidden = true;
   $('#addGearForm').reset();
   $('#autoFillHint').textContent = '';
+  $('#autoFillProgress').hidden = true;
+  $('#autoFillRetryBtn').hidden = true;
+  $('#weightFormRow').classList.remove('needs-input');
+  $('#viewSourceLink').hidden = true;
+  $('#deleteGearBtn').hidden = true;
+  $('#gearModalTitle').textContent = '장비 추가';
+  $('#gearSubmitBtn').textContent = '추가';
+  editingGearId = null;
   autoFillImage = null;
 }
 
-let autoFillImage = null;
+$('#deleteGearBtn').addEventListener('click', () => {
+  if (!editingGearId) return;
+  const idToDelete = editingGearId;
+  closeAddGearModal();
+  deleteGear(idToDelete);
+});
 
 $('#showInventoryBtn').addEventListener('click', openInventory);
 $('#newPackBtn').addEventListener('click', createNewPack);
@@ -594,16 +652,29 @@ $('#resetDataBtn').addEventListener('click', () => {
   showView('welcome');
 });
 
-$('#autoFillBtn').addEventListener('click', async () => {
+async function runAutoFill() {
   const url = $('#linkInput').value;
+  const hint = $('#autoFillHint');
+  const btn = $('#autoFillBtn');
+  const label = $('#autoFillBtnLabel');
+  const progress = $('#autoFillProgress');
+  const retryBtn = $('#autoFillRetryBtn');
+
+  $('#weightFormRow').classList.remove('needs-input');
+  retryBtn.hidden = true;
+
   if (!url) {
-    $('#autoFillHint').textContent = '링크를 입력해주세요.';
-    $('#autoFillHint').className = 'hint error';
+    hint.textContent = '링크를 입력해주세요.';
+    hint.className = 'hint error';
     return;
   }
 
-  $('#autoFillBtn').textContent = '검색 중...';
-  $('#autoFillBtn').disabled = true;
+  btn.classList.add('autofill-loading');
+  label.textContent = '가져오는 중...';
+  btn.disabled = true;
+  progress.hidden = false;
+  hint.textContent = '정보를 가져오는 중이에요. 사이트에 따라 최대 15초 정도 걸릴 수 있어요.';
+  hint.className = 'hint';
 
   try {
     const res = await fetch('/api/extract', {
@@ -619,31 +690,67 @@ $('#autoFillBtn').addEventListener('click', async () => {
     if (data.price && data.price.amount) $('#priceInput').value = data.price.amount;
     autoFillImage = data.image || null;
 
-    $('#autoFillHint').textContent = '정보를 가져왔어요. 무게/가격을 다시 한 번 확인해주세요.';
-    $('#autoFillHint').className = 'hint success';
+    const guessedCategory = guessCategory(`${data.name || ''} ${data.description || ''}`);
+    if (guessedCategory) $('#categoryInput').value = guessedCategory;
+
+    const missing = [];
+    if (!data.name) missing.push('이름');
+    if (!data.weight || !data.weight.grams) missing.push('무게');
+    if (!data.price || !data.price.amount) missing.push('가격');
+
+    if (missing.length === 0) {
+      hint.textContent = '이름·무게·가격을 모두 가져왔어요. 한 번 더 확인해주세요.';
+      hint.className = 'hint success';
+    } else {
+      if (missing.includes('무게')) $('#weightFormRow').classList.add('needs-input');
+      hint.textContent = `${missing.join('·')}은(는) 찾지 못했어요. 직접 입력해주세요.`;
+      hint.className = 'hint warning';
+    }
   } catch (err) {
-    $('#autoFillHint').textContent = `${err.message} — 이름/무게/가격을 직접 입력해주세요. (네이버 스마트스토어 등 일부 사이트는 로그인 벽 때문에 자동 인식이 안 될 수 있어요)`;
-    $('#autoFillHint').className = 'hint error';
+    const isLoginWall = err.message.includes('LOGIN_WALL');
+    const isBlocked = err.message.includes('BLOCKED_PAGE');
+    hint.textContent = isLoginWall
+      ? '로그인이 필요한 페이지라 가져오지 못했어요. 이름·무게·가격을 직접 입력하거나 다시 시도해보세요.'
+      : isBlocked
+      ? '사이트가 접근을 막아서 가져오지 못했어요. 잠시 후 다시 시도하거나 직접 입력해주세요.'
+      : `정보를 가져오지 못했어요: ${err.message} — 직접 입력해주세요.`;
+    hint.className = 'hint error';
+    retryBtn.hidden = false;
   } finally {
-    $('#autoFillBtn').textContent = '자동 채우기';
-    $('#autoFillBtn').disabled = false;
+    btn.classList.remove('autofill-loading');
+    label.textContent = '자동 채우기';
+    btn.disabled = false;
+    progress.hidden = true;
   }
-});
+}
+
+$('#autoFillBtn').addEventListener('click', runAutoFill);
+$('#autoFillRetryBtn').addEventListener('click', runAutoFill);
 
 $('#addGearForm').addEventListener('submit', (e) => {
   e.preventDefault();
 
-  const newGear = {
-    id: crypto.randomUUID(),
+  const fields = {
     name: $('#nameInput').value,
     category: $('#categoryInput').value,
     weight: Number($('#weightInput').value),
     price_krw: Number($('#priceInput').value),
     source_url: $('#linkInput').value || null,
     image: autoFillImage,
-    created_at: new Date().toISOString(),
   };
 
+  if (editingGearId) {
+    const gear = gears.find((g) => g.id === editingGearId);
+    if (gear) Object.assign(gear, fields);
+    saveData();
+    closeAddGearModal();
+    if (currentView === 'inventory') renderInventoryView($('#inventorySearch').value);
+    if (currentView === 'pack') renderPackDetail();
+    renderNav();
+    return;
+  }
+
+  const newGear = { id: crypto.randomUUID(), ...fields, created_at: new Date().toISOString() };
   gears.push(newGear);
   saveData();
   closeAddGearModal();
@@ -690,7 +797,7 @@ function renderShareChart(items) {
       datasets: [
         {
           data: Object.values(byCategory),
-          backgroundColor: ['#c2603d', '#4e8c6b', '#6b7fd7', '#c99a2e', '#8b5cf6', '#2f7a6b', '#c1443a', '#8a8578'],
+          backgroundColor: ['#5b8fb0', '#c2603d', '#4e8c6b', '#6b7fd7', '#c99a2e', '#8b5cf6', '#2f7a6b', '#c1443a', '#8a8578'],
           borderWidth: 0,
         },
       ],

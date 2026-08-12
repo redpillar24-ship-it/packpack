@@ -3,6 +3,7 @@
 // 사이트마다 구조가 제각각이라 100% 정확하지는 않음 -> 사용자가 결과를 확인/수정하는 걸 전제로 설계.
 
 const cheerio = require('cheerio');
+const { isErrorPageTitle } = require('./error-page-detect');
 
 const WEIGHT_REGEX = /(\d[\d,.]*)\s*(kilograms?|kg|grams?|g|pounds?|lbs?|lb|ounces?|oz)\b/i;
 const PRICE_SYMBOL_REGEX = /([₩$€£¥])\s?([\d][\d,.]*)|([\d][\d,.]*)\s?(원|USD|KRW|EUR|JPY|GBP|CNY)/;
@@ -262,6 +263,9 @@ async function extractProductInfo(url) {
   const productLd = findProductLd(ldItems);
 
   const title = extractTitle($, productLd);
+  if (isErrorPageTitle(title)) {
+    throw new Error('BLOCKED_PAGE');
+  }
   const image = extractImage($, productLd);
   const price = extractPrice($, productLd);
   const weight = extractWeight($);

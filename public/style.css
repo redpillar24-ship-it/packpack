@@ -327,7 +327,7 @@ button, input, select {
   padding: 14px;
   box-shadow: var(--shadow);
   transition: box-shadow 0.15s ease, transform 0.15s ease;
-  cursor: grab;
+  cursor: pointer;
 }
 
 .inv-card:hover {
@@ -834,6 +834,28 @@ button, input, select {
   background: var(--border);
 }
 
+.btn.danger {
+  background: var(--danger-tint);
+  color: var(--danger);
+  margin-left: auto;
+}
+
+.btn.danger:hover {
+  background: var(--danger);
+  color: #fff;
+}
+
+.view-source-link {
+  display: inline-block;
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.view-source-link:hover {
+  text-decoration: underline;
+}
+
 .btn-small {
   padding: 8px 12px;
   border: 1px solid var(--border);
@@ -866,6 +888,69 @@ button, input, select {
 
 .hint.success {
   color: var(--success);
+}
+
+.hint.warning {
+  color: #9a6b1f;
+}
+
+.hint-retry {
+  margin-top: 6px;
+}
+
+/* 자동채우기 진행 표시 — 얇은 불확정 진행바 */
+.autofill-progress {
+  height: 3px;
+  border-radius: 999px;
+  background: var(--border);
+  overflow: hidden;
+  margin-top: 8px;
+}
+
+.autofill-progress span {
+  display: block;
+  height: 100%;
+  width: 40%;
+  background: var(--accent);
+  border-radius: 999px;
+  animation: autofillSweep 1.1s ease-in-out infinite;
+}
+
+@keyframes autofillSweep {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(350%); }
+}
+
+/* 태그 아이콘 — 로딩 중 살짝 흔들리다 완료되면 멈춤 (장비 태그 컨셉) */
+.tag-icon {
+  display: inline-block;
+  margin-right: 4px;
+}
+
+.autofill-loading .tag-icon {
+  animation: tagSwing 0.9s ease-in-out infinite;
+  transform-origin: top center;
+}
+
+@keyframes tagSwing {
+  0%, 100% { transform: rotate(-8deg); }
+  50% { transform: rotate(8deg); }
+}
+
+/* 부분 성공 시 못 가져온 필드 강조 */
+.form-row.needs-input label {
+  color: #9a6b1f;
+}
+
+.form-row.needs-input input {
+  border-color: #d9a441;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .autofill-progress span,
+  .autofill-loading .tag-icon {
+    animation: none;
+  }
 }
 
 /* ============ 반응형 ============ */

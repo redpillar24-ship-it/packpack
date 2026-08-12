@@ -153,7 +153,7 @@
       <div id="addGearModal" class="modal" hidden>
         <div class="modal-content">
           <header class="modal-header">
-            <h2>장비 추가</h2>
+            <h2 id="gearModalTitle">장비 추가</h2>
             <button id="closeModalBtn" class="close-btn">✕</button>
           </header>
           <form id="addGearForm">
@@ -161,10 +161,15 @@
               <label for="linkInput">제품 링크</label>
               <div class="input-group">
                 <input type="url" id="linkInput" placeholder="https://..." />
-                <button type="button" id="autoFillBtn" class="btn-small">자동 채우기</button>
+                <button type="button" id="autoFillBtn" class="btn-small">
+                  <span class="tag-icon" aria-hidden="true">🏷️</span><span id="autoFillBtnLabel">자동 채우기</span>
+                </button>
               </div>
+              <a id="viewSourceLink" class="hint view-source-link" href="#" target="_blank" rel="noopener" hidden>제품 페이지 열기 →</a>
             </div>
+            <div id="autoFillProgress" class="autofill-progress" hidden><span></span></div>
             <p id="autoFillHint" class="hint"></p>
+            <button type="button" id="autoFillRetryBtn" class="btn-small hint-retry" hidden>다시 시도</button>
 
             <div class="form-row">
               <label for="nameInput">제품명 *</label>
@@ -175,6 +180,7 @@
               <div class="form-row">
                 <label for="categoryInput">카테고리</label>
                 <select id="categoryInput">
+                  <option value="배낭">배낭</option>
                   <option value="쉘터">쉘터</option>
                   <option value="침낭">침낭</option>
                   <option value="매트">매트</option>
@@ -185,7 +191,7 @@
                   <option value="기타" selected>기타</option>
                 </select>
               </div>
-              <div class="form-row">
+              <div class="form-row" id="weightFormRow">
                 <label for="weightInput">무게 (g) *</label>
                 <input type="number" id="weightInput" required min="0" step="1" placeholder="505" />
               </div>
@@ -196,8 +202,9 @@
             </div>
 
             <div class="form-actions">
-              <button type="submit" class="btn primary">추가</button>
+              <button type="submit" id="gearSubmitBtn" class="btn primary">추가</button>
               <button type="button" id="cancelBtn" class="btn secondary">취소</button>
+              <button type="button" id="deleteGearBtn" class="btn danger" hidden>삭제</button>
             </div>
           </form>
         </div>

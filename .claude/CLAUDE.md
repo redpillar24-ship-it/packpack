@@ -13,7 +13,7 @@
 ### 1. 마스터 장비 리스트
 - 사용자가 소유한 모든 장비를 등록 (링크로 자동 추출 또는 수동 입력)
 - localStorage에 저장
-- 카테고리별로 관리 (쉘터, 침낭, 매트, 의류, 신발, 전자기기, 조리, 기타)
+- 카테고리별로 관리 (배낭, 쉘터, 침낭, 매트, 의류, 신발, 전자기기, 조리, 기타)
 
 ### 2. 팩(Pack) 만들기
 - "260815 울릉도 주말백패킹" 같은 팩 생성
@@ -60,7 +60,7 @@ rates.js            환율 조회 (frankfurter.app, 캐시 6시간)
   {
     id,             // UUID
     name,           // 제품명
-    category,       // 쉘터/침낭/매트/의류/신발/전자기기/조리/기타
+    category,       // 배낭/쉘터/침낭/매트/의류/신발/전자기기/조리/기타
     weight,         // 무게 (그램, 정수)
     price_krw,      // 가격 (한화, 정수)
     source_url,     // 제품 링크 (선택)
@@ -97,6 +97,14 @@ rates.js            환율 조회 (frankfurter.app, 캐시 6시간)
 **Puppeteer 동적 크롤링:**
 - 네이버 스마트스토어, 지마켓, 옥션 등 JS 렌더링 필요한 사이트는 Puppeteer로 처리
 - Cheerio (정적 파싱)보다 느리지만 더 많은 사이트 지원 가능
+- `puppeteer-extra` + `puppeteer-extra-plugin-stealth` 적용 (2026-08-12) — 헤드리스 탐지 흔적
+  (navigator.webdriver, WebGL 등) 패치, `headless: 'new'` + 실제 UA/viewport 세팅으로 봇탐지 우회 시도.
+  100% 보장 안 됨 — IP 평판/TLS 핑거프린트 등은 못 막음
+- `server/error-page-detect.js`: 봇차단/에러 페이지 제목을 상품명으로 잘못 채우는 걸 막는 공용 판별기.
+  `extractor.js`(Cheerio)·`extractor-dynamic.js`(Puppeteer) 둘 다 사용
+- 네이버 쇼핑 검색 API 경로는 완전히 막힘(2026-07-31 서비스 종료, 대체 API 없음) — 검색/커머스/데이터랩 API,
+  다나와/에누리 API도 검토했으나 전부 부적합 (커버리지 없음 또는 판매자 전용). 크롤링 개선이 유일한 경로.
+  자세한 내용은 [SPEC.md](../SPEC.md) 참고
 
 ## 주의사항
 

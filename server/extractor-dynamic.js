@@ -2,7 +2,12 @@
 // Puppeteer를 사용한 동적 웹사이트 크롤링
 // 네이버 스마트스토어, 지마켓 등 JavaScript 렌더링이 필요한 사이트용
 
-const puppeteer = require('puppeteer');
+// stealth 플러그인: navigator.webdriver, headless 전용 WebGL/plugin 값 등
+// 봇탐지 흔적을 패치해서 로그인벽/차단 확률을 낮춘다 (100% 보장은 아님)
+const puppeteer = require('puppeteer-extra');
+const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+const { isErrorPageTitle } = require('./error-page-detect');
+puppeteer.use(StealthPlugin());
 
 // 사이트별 선택자(CSS selector) 정의
 const SITE_CONFIGS = {
@@ -41,11 +46,26 @@ let browser = null;
 async function initBrowser() {
   if (!browser) {
     browser = await puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+      headless: 'new', // 구형 헤드리스보다 실제 크롬에 가까움 (탐지 확률 낮음)
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-blink-features=AutomationControlled', // 자동화 플래그 숨김
+        '--window-size=1920,1080',
+      ],
     });
   }
   return browser;
+}
+
+async function newStealthPage() {
+  const page = await (await initBrowser()).newPage();
+  await page.setViewport({ width: 1920, height: 1080 });
+  await page.setUserAgent(
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+  );
+  await page.setExtraHTTPHeaders({ 'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7' });
+  return page;
 }
 
 async function closeBrowser() {
@@ -57,7 +77,7 @@ async function closeBrowser() {
 
 // 제품 페이지 분석해서 이름/이미지/가격 추출
 async function extractFromDynamicSite(url) {
-  const page = await (await initBrowser()).newPage();
+  const page = await newStealthPage();
   const timeout = 15000; // 15초로 증가
 
   try {
@@ -94,6 +114,15 @@ async function extractFromDynamicSite(url) {
       };
     });
 
+    // 로그인벽/차단·에러 페이지에 막혔는지 확인 (stealth 적용해도 뚫리지 않을 수 있음)
+    if (!pageData.ogTitle && /로그인.{0,10}(필요|해주세요|후 이용)/.test(pageData.bodyText)) {
+      throw new Error('LOGIN_WALL');
+    }
+    const fallbackTitle = pageData.ogTitle || pageData.title;
+    if (isErrorPageTitle(fallbackTitle)) {
+      throw new Error('BLOCKED_PAGE');
+    }
+
     // 가격 추출 (숫자 패턴) — 한화 우선
     const krwMatch = pageData.bodyText.match(/[\d,]+(?:원|₩)/);
     const priceMatch = krwMatch || pageData.bodyText.match(/[\d,]+(?:원|₩|\$|€)?/);
@@ -121,7 +150,7 @@ async function extractFromDynamicSite(url) {
 
 // 특정 사이트의 무게 정보 추출 (더 정교한 파싱)
 async function extractWeightFromPage(url) {
-  const page = await (await initBrowser()).newPage();
+  const page = await newStealthPage();
 
   try {
     await page.goto(url, { waitUntil: 'networkidle2' });
