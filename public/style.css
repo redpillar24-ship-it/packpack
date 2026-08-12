@@ -1,24 +1,25 @@
-/* PackPack — Claude 앱 스타일 (따뜻한 크림 + 테라코타 악센트, 미니멀) */
+/* PackPack — 무채색 미니멀 (블랙/그레이/화이트, 위험 동작에만 최소한의 레드) */
 
 :root {
-  --bg: #faf9f6;
-  --bg-nav: #f0eee6;
+  --bg: #fafafa;
+  --bg-nav: #f1f1f1;
   --surface: #ffffff;
-  --surface-hover: #f5f3ec;
-  --border: #e8e5db;
-  --text: #2d2a26;
-  --text-muted: #8a8578;
-  --accent: #c2603d;
-  --accent-hover: #a94e2f;
-  --accent-tint: #f3e3da;
-  --success: #4e8c6b;
-  --danger: #c1443a;
-  --danger-tint: #fbe9e6;
-  --radius-sm: 8px;
-  --radius: 12px;
-  --radius-lg: 18px;
-  --shadow: 0 1px 2px rgba(45, 42, 38, 0.04), 0 4px 14px rgba(45, 42, 38, 0.05);
-  --shadow-hover: 0 2px 6px rgba(45, 42, 38, 0.06), 0 8px 24px rgba(45, 42, 38, 0.08);
+  --surface-hover: #f2f2f2;
+  --border: #e2e2e2;
+  --text: #141414;
+  --text-muted: #767676;
+  --accent: #171717;
+  --accent-hover: #000000;
+  --accent-tint: #ececec;
+  --success: #141414;
+  --danger: #b3261e;
+  --danger-tint: #f7e9e8;
+  --warning: #5c5c5c;
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 16px;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 14px rgba(0, 0, 0, 0.05);
+  --shadow-hover: 0 2px 6px rgba(0, 0, 0, 0.06), 0 8px 24px rgba(0, 0, 0, 0.08);
 }
 
 * {
@@ -143,7 +144,7 @@ button, input, select {
 }
 
 .nav-item.active .nav-badge {
-  background: rgba(194, 96, 61, 0.16);
+  background: rgba(0, 0, 0, 0.1);
   color: var(--accent-hover);
 }
 
@@ -209,19 +210,28 @@ button, input, select {
   white-space: pre-line;
 }
 
+.nav-danger-zone {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
 .nav-reset {
-  align-self: flex-start;
+  display: block;
+  width: 100%;
+  text-align: left;
   background: none;
   border: none;
   color: var(--text-muted);
-  font-size: 0.72rem;
-  text-decoration: underline;
+  font-size: 0.7rem;
   cursor: pointer;
-  padding: 2px 10px;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
 }
 
 .nav-reset:hover {
   color: var(--danger);
+  background: var(--danger-tint);
 }
 
 /* ============ 메인 콘텐츠 ============ */
@@ -891,7 +901,8 @@ button, input, select {
 }
 
 .hint.warning {
-  color: #9a6b1f;
+  color: var(--warning);
+  font-weight: 600;
 }
 
 .hint-retry {
@@ -939,17 +950,63 @@ button, input, select {
 
 /* 부분 성공 시 못 가져온 필드 강조 */
 .form-row.needs-input label {
-  color: #9a6b1f;
+  color: var(--text);
+}
+
+.form-row.needs-input label::after {
+  content: ' — 확인 필요';
+  font-weight: 400;
+  color: var(--warning);
 }
 
 .form-row.needs-input input {
-  border-color: #d9a441;
+  border-color: var(--text-muted);
+  border-width: 2px;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .autofill-progress span,
   .autofill-loading .tag-icon {
     animation: none;
+  }
+}
+
+/* ============ 공유 링크 전용 화면 (독립 페이지) ============ */
+/* 사이드바·다른 팩 목록 없이 그 팩 정보만 — 화면에서든 프린트에서든 */
+body.share-mode .nav {
+  display: none;
+}
+
+body.share-mode .main {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 40px 24px;
+}
+
+.share-view .view-header {
+  align-items: center;
+}
+
+@media print {
+  .nav,
+  #importSharedBtn,
+  .modal {
+    display: none !important;
+  }
+
+  body,
+  .main {
+    background: #fff;
+    padding: 0;
+    overflow: visible;
+    height: auto;
+  }
+
+  .pack-summary,
+  .category-section {
+    box-shadow: none;
+    border: 1px solid #ccc;
+    break-inside: avoid;
   }
 }
 

@@ -61,8 +61,22 @@ function formatPrice(amount) {
 }
 
 function formatWeight(grams) {
-  if (grams >= 1000) return `${(grams / 1000).toFixed(2)} kg`;
-  return `${grams} g`;
+  if (grams >= 1000) return `${(grams / 1000).toLocaleString('ko-KR', { maximumFractionDigits: 2 })} kg`;
+  return `${Number(grams).toLocaleString('ko-KR')} g`;
+}
+
+// 숫자 입력창에 타이핑하는 대로 천단위 콤마를 붙여준다 (무게/가격 입력용)
+function formatNumberInput(el) {
+  const digitsOnly = el.value.replace(/[^\d]/g, '');
+  el.value = digitsOnly ? Number(digitsOnly).toLocaleString('ko-KR') : '';
+}
+
+function setNumberInputValue(el, rawNumber) {
+  el.value = rawNumber || rawNumber === 0 ? Number(rawNumber).toLocaleString('ko-KR') : '';
+}
+
+function parseNumberInput(el) {
+  return Number(el.value.replace(/[^\d]/g, '')) || 0;
 }
 
 // ============================================
@@ -116,6 +130,9 @@ function showView(view) {
   $('#inventoryView').hidden = view !== 'inventory';
   $('#packView').hidden = view !== 'pack';
   $('#shareView').hidden = view !== 'share';
+  // 공유받은 팩은 독립된 페이지로 보여줌 — 내 사이드바/다른 팩 목록이 섞여 보이면 안 되고,
+  // 프린트했을 때도 그 팩 정보만 나와야 함
+  document.body.classList.toggle('share-mode', view === 'share');
   renderNav();
 }
 
@@ -321,8 +338,9 @@ function renderChart(items) {
       datasets: [
         {
           data: Object.values(byCategory),
-          backgroundColor: ['#5b8fb0', '#c2603d', '#4e8c6b', '#6b7fd7', '#c99a2e', '#8b5cf6', '#2f7a6b', '#c1443a', '#8a8578'],
-          borderWidth: 0,
+          backgroundColor: ['#1a1a1a', '#333333', '#4d4d4d', '#666666', '#808080', '#969696', '#adadad', '#c2c2c2', '#d6d6d6'],
+          borderColor: '#fff',
+          borderWidth: 2,
         },
       ],
     },
@@ -495,9 +513,9 @@ function renderDropZone(items, packId) {
               <td>${formatPrice(item.price_krw)}</td>
               <td>
                 <span class="qty-controls">
-                  <button class="qty-btn" data-action="dec" data-gear-id="${item.id}">−</button>
-                  ${item.quantity}
                   <button class="qty-btn" data-action="inc" data-gear-id="${item.id}">+</button>
+                  ${item.quantity}
+                  <button class="qty-btn" data-action="dec" data-gear-id="${item.id}">−</button>
                 </span>
               </td>
               <td><button class="icon-btn remove-btn" data-gear-id="${item.id}">🗑️</button></td>
@@ -540,8 +558,8 @@ function openAddGearModal(gear = null) {
     $('#linkInput').value = gear.source_url || '';
     $('#nameInput').value = gear.name;
     $('#categoryInput').value = gear.category;
-    $('#weightInput').value = gear.weight;
-    $('#priceInput').value = gear.price_krw;
+    setNumberInputValue($('#weightInput'), gear.weight);
+    setNumberInputValue($('#priceInput'), gear.price_krw);
     autoFillImage = gear.image || null;
 
     const viewLink = $('#viewSourceLink');
@@ -580,12 +598,15 @@ $('#deleteGearBtn').addEventListener('click', () => {
   deleteGear(idToDelete);
 });
 
+$('#weightInput').addEventListener('input', (e) => formatNumberInput(e.target));
+$('#priceInput').addEventListener('input', (e) => formatNumberInput(e.target));
+
 $('#showInventoryBtn').addEventListener('click', openInventory);
 $('#newPackBtn').addEventListener('click', createNewPack);
 $('#welcomeNewPackBtn').addEventListener('click', createNewPack);
-$('#addGearBtnMain').addEventListener('click', openAddGearModal);
-$('#addGearBtnPack').addEventListener('click', openAddGearModal);
-$('#welcomeAddGearBtn').addEventListener('click', openAddGearModal);
+$('#addGearBtnMain').addEventListener('click', () => openAddGearModal());
+$('#addGearBtnPack').addEventListener('click', () => openAddGearModal());
+$('#welcomeAddGearBtn').addEventListener('click', () => openAddGearModal());
 $('#closeModalBtn').addEventListener('click', closeAddGearModal);
 $('#cancelBtn').addEventListener('click', closeAddGearModal);
 $('#deletePackBtn').addEventListener('click', deletePack);
@@ -686,8 +707,8 @@ async function runAutoFill() {
     if (!res.ok) throw new Error(data.error);
 
     $('#nameInput').value = data.name || '';
-    if (data.weight && data.weight.grams) $('#weightInput').value = data.weight.grams;
-    if (data.price && data.price.amount) $('#priceInput').value = data.price.amount;
+    if (data.weight && data.weight.grams) setNumberInputValue($('#weightInput'), data.weight.grams);
+    if (data.price && data.price.amount) setNumberInputValue($('#priceInput'), data.price.amount);
     autoFillImage = data.image || null;
 
     const guessedCategory = guessCategory(`${data.name || ''} ${data.description || ''}`);
@@ -733,8 +754,8 @@ $('#addGearForm').addEventListener('submit', (e) => {
   const fields = {
     name: $('#nameInput').value,
     category: $('#categoryInput').value,
-    weight: Number($('#weightInput').value),
-    price_krw: Number($('#priceInput').value),
+    weight: parseNumberInput($('#weightInput')),
+    price_krw: parseNumberInput($('#priceInput')),
     source_url: $('#linkInput').value || null,
     image: autoFillImage,
   };
@@ -797,8 +818,9 @@ function renderShareChart(items) {
       datasets: [
         {
           data: Object.values(byCategory),
-          backgroundColor: ['#5b8fb0', '#c2603d', '#4e8c6b', '#6b7fd7', '#c99a2e', '#8b5cf6', '#2f7a6b', '#c1443a', '#8a8578'],
-          borderWidth: 0,
+          backgroundColor: ['#1a1a1a', '#333333', '#4d4d4d', '#666666', '#808080', '#969696', '#adadad', '#c2c2c2', '#d6d6d6'],
+          borderColor: '#fff',
+          borderWidth: 2,
         },
       ],
     },

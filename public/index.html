@@ -30,7 +30,9 @@
 
       <div class="nav-footer">
         <span id="rateDisplay" class="nav-rate">환율 로딩 중...</span>
-        <button id="resetDataBtn" class="nav-reset" title="모든 데이터 초기화">초기화</button>
+      </div>
+      <div class="nav-danger-zone">
+        <button id="resetDataBtn" class="nav-reset" title="모든 장비·팩 데이터를 삭제합니다 (되돌릴 수 없음)">전체 데이터 삭제</button>
       </div>
     </aside>
 
@@ -193,11 +195,11 @@
               </div>
               <div class="form-row" id="weightFormRow">
                 <label for="weightInput">무게 (g) *</label>
-                <input type="number" id="weightInput" required min="0" step="1" placeholder="505" />
+                <input type="text" id="weightInput" inputmode="numeric" required placeholder="505" />
               </div>
               <div class="form-row">
                 <label for="priceInput">가격 (₩) *</label>
-                <input type="number" id="priceInput" required min="0" step="1" placeholder="999770" />
+                <input type="text" id="priceInput" inputmode="numeric" required placeholder="999,770" />
               </div>
             </div>
 
