@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>PackPack — 장비 관리</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>🏕️ PackPack</h1>
+    <p class="tagline">Pack with purpose, Travel with confidence</p>
+  </header>
+
+  <main class="container">
+    <section class="stats" aria-label="요약 통계">
+      <div class="stat-card">
+        <span class="stat-label">총 무게</span>
+        <span class="stat-value" id="statWeight">0 g</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">총 가격</span>
+        <span class="stat-value" id="statPrice">$0</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">장비 수</span>
+        <span class="stat-value" id="statCount">0</span>
+      </div>
+    </section>
+
+    <section class="add-panel" aria-label="장비 추가">
+      <h2>장비 추가</h2>
+
+      <div class="field-row">
+        <label for="linkInput">제품 링크 (선택)</label>
+        <div class="link-row">
+          <input type="url" id="linkInput" placeholder="https://... 제품 페이지 링크를 붙여넣으세요" />
+          <button type="button" id="autoFillBtn" class="btn secondary">🔍 자동 채우기</button>
+        </div>
+        <p class="hint" id="autoFillHint"></p>
+      </div>
+
+      <form id="gearForm">
+        <div class="field-grid">
+          <div class="field-row">
+            <label for="nameInput">제품명 *</label>
+            <input type="text" id="nameInput" required placeholder="예: Salomon XT-6" />
+          </div>
+          <div class="field-row">
+            <label for="categoryInput">카테고리</label>
+            <select id="categoryInput">
+              <option value="쉘터">쉘터</option>
+              <option value="수면">수면</option>
+              <option value="조리">조리</option>
+              <option value="의류">의류</option>
+              <option value="신발">신발</option>
+              <option value="전자">전자</option>
+              <option value="기타" selected>기타</option>
+            </select>
+          </div>
+          <div class="field-row">
+            <label for="weightInput">무게 (g)</label>
+            <input type="number" id="weightInput" min="0" step="1" placeholder="0" />
+          </div>
+          <div class="field-row">
+            <label for="priceInput">가격 ($)</label>
+            <input type="number" id="priceInput" min="0" step="0.01" placeholder="0.00" />
+          </div>
+        </div>
+
+        <div class="preview" id="autoFillPreview" hidden>
+          <img id="previewImg" alt="" />
+          <div class="preview-info">
+            <p id="previewSite" class="preview-site"></p>
+            <p id="previewDesc" class="preview-desc"></p>
+          </div>
+        </div>
+
+        <button type="submit" class="btn primary">+ 리스트에 추가</button>
+      </form>
+    </section>
+
+    <section class="filter-panel" aria-label="카테고리 필터">
+      <div id="filterButtons" class="filter-buttons"></div>
+    </section>
+
+    <section class="list-panel" aria-label="장비 리스트">
+      <ul id="gearList" class="gear-list"></ul>
+      <p id="emptyState" class="empty-state">아직 등록된 장비가 없어요. 위에서 추가해 보세요!</p>
+    </section>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>
