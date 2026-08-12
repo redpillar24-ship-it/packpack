@@ -1,110 +1,159 @@
-# PackPack 개발 가이드 (Claude 세션용)
+# PackPack v2 개발 가이드
 
-이 문서는 다음 세션에서 맥락을 빠르게 잡기 위한 문서입니다. 코드에서 바로 알 수 있는 내용(파일 목록 등)은 반복하지 않고, **왜 이렇게 만들었는지 / 어떤 함정을 피해야 하는지**를 기록합니다.
+이 문서는 다음 세션에서 맥락을 빠르게 잡기 위한 문서입니다.
 
 ## 한 줄 요약
 
-LighterPack에서 영감을 받은 캠핑/등산 장비 관리 웹앱. 제품 링크를 붙여넣으면 서버가 페이지를 파싱해서 이름/이미지/가격/무게를 자동으로 채워준다. 모든 기능은 무료(유료 API 키 없음)로 동작하도록 설계됨.
+**LighterPack.com을 참고한 백패킹 장비 세트 관리 앱.**
 
-## 구조
+사용자는 자신이 소유한 장비를 **마스터 리스트**에 한 번 등록하고, 여행을 계획할 때마다 그 리스트에서 필요한 장비를 선택해서 **팩(Pack)**을 만든다. 각 팩의 총 무게와 가격이 자동으로 계산되고, 카테고리별로 시각화된다.
 
+## 핵심 기능
+
+### 1. 마스터 장비 리스트
+- 사용자가 소유한 모든 장비를 등록 (링크로 자동 추출 또는 수동 입력)
+- localStorage에 저장
+- 카테고리별로 관리 (쉘터, 침낭, 매트, 의류, 신발, 전자기기, 조리, 기타)
+
+### 2. 팩(Pack) 만들기
+- "260815 울릉도 주말백패킹" 같은 팩 생성
+- 마스터 리스트에서 필요한 장비를 팩에 추가 (수량 조정 가능)
+- 팩마다 자동으로 계산: 총 무게, 총 가격, 장비 수
+
+### 3. 시각화
+- 도넛 차트: 카테고리별 무게 비율
+- 카테고리별 테이블: 각 항목의 무게, 가격, 수량
+- 요약 통계: 총 무게, 총 가격
+
+## 아키텍처
+
+### 프론트엔드 (public/)
 ```
-public/          프론트엔드 — 순수 HTML/CSS/JS, 빌드 과정 없음
-  index.html
-  style.css
-  script.js
-server/
-  server.js      Express: 정적 파일 서빙 + /api/extract, /api/rates
-  extractor.js   제품 페이지 파싱 (핵심 로직)
-  rates.js       환율 조회 + 캐싱
+index.html      레이아웃 (좌측 사이드바 + 중앙 메인)
+style.css       LighterPack 스타일 (밝고 깔끔함)
+script.js       모든 로직 (localStorage 기반)
 ```
 
-- 실행: `npm install && npm start` → `http://localhost:3000`
-- 개발 중 자동 재시작: `npm run dev` (`node --watch`)
-- 장비 데이터는 **브라우저 localStorage**에만 저장됨 (`packpack_gears` 키). 서버는 DB를 갖지 않는 stateless 파서 역할만 함.
+**특징:**
+- 마스터 리스트: 좌측 사이드바 (카테고리별 폴더 구조)
+- 팩 목록: 좌측 사이드바 (클릭으로 선택)
+- 팩 상세: 중앙 (도넛 차트 + 테이블)
+- 데이터는 100% 브라우저 localStorage에 저장
 
-## 데이터 모델 (localStorage `packpack_gears`)
+### 백엔드 (server/)
+```
+server.js           Express 서버 (API 엔드포인트)
+extractor.js        Cheerio 기반 정적 HTML 파싱
+extractor-dynamic.js  Puppeteer 기반 동적 사이트 크롤링
+rates.js            환율 조회 (frankfurter.app, 캐시 6시간)
+```
 
+**API 엔드포인트:**
+- `POST /api/extract` — 제품 링크에서 정보 추출 (Cheerio 또는 Puppeteer)
+- `GET /api/rates` — 환율 조회 (USD → KRW)
+
+## 데이터 모델 (localStorage)
+
+### 마스터 장비 (packpack_gears)
 ```js
-{
-  id, name, category, weight, // weight는 항상 그램(g) 단위로 저장
-  officialPrice: { amount, currency },  // 공식/정가
-  actualPrice:   { amount, currency },  // 실제 지불한 금액 (할인/중고 등으로 다를 수 있음)
-  link, image, addedAt
-}
+[
+  {
+    id,             // UUID
+    name,           // 제품명
+    category,       // 쉘터/침낭/매트/의류/신발/전자기기/조리/기타
+    weight,         // 무게 (그램, 정수)
+    price_krw,      // 가격 (한화, 정수)
+    source_url,     // 제품 링크 (선택)
+    image,          // 제품 이미지 URL (선택)
+    created_at      // 등록일 ISO 문자열
+  }
+]
 ```
 
-두 가격을 분리한 이유: 사용자가 "공식 가격"과 "실구매 가격"을 둘 다 추적하고 싶어함 (예: 세일가/중고가로 산 경우). 자동 채우기는 사이트에 표시된 가격을 `officialPrice`에 넣고, `actualPrice`는 기본으로 같은 값을 채워두되 사용자가 직접 수정하게 함.
+### 팩 (packpack_packs)
+```js
+[
+  {
+    id,             // UUID
+    name,           // 팩 이름 (예: "260815 울릉도")
+    items: [        // 팩에 포함된 장비
+      { gear_id, quantity }
+    ],
+    created_at,     // 생성일
+    trip_date       // 여행 날짜 (선택)
+  }
+]
+```
 
-## 통화 처리 방식 — 중요
+## 환율 처리
 
-**가격은 원래 통화 그대로 저장한다.** 한국 쇼핑몰 링크면 KRW, 일본이면 JPY, 미국이면 USD로 자동 감지되어 저장되고, 강제로 하나의 통화로 변환해서 저장하지 않는다. 화면에 표시할 때만 필요하면 환산한다.
+**원칙:** 모든 가격을 **한화(KRW)로 통일해서 저장**.
 
-- 통화 감지 우선순위 (`extractor.js`): JSON-LD `Product.offers.priceCurrency` → `og:price:currency` 메타 태그 → 기호(₩/$/€/£/¥) → 그래도 없으면 **도메인 TLD로 추론** (`.kr`→KRW, `.jp`→JPY, `.uk`→GBP, 유럽 TLD→EUR, 그 외→USD 기본값)
-- 환율은 `server/rates.js`가 [frankfurter.app](https://frankfurter.app)(ECB 기준, 무료, API 키 불필요)에서 `base=USD`로 한 번만 받아와 6시간 메모리 캐싱. 프론트에서는 USD를 매개로 교차 계산(cross-rate)해서 어떤 통화 조합이든 변환 가능.
-  - 코드 형태: `rates.rates[cur]` = "1 USD당 해당 통화 금액". A→B 변환은 `(amount / rates[A]) * rates[B]`.
-- 프론트 UI: 상단 "환산 통화" 드롭다운(기본 KRW)으로 **합계(총 공식가/총 실구매가)**는 항상 이 통화로 환산해서 보여줌 (서로 다른 통화를 그냥 더하면 안 되니까). 리스트의 개별 항목은 원래 통화로 보여주다가, 가격 배지(버튼)를 클릭하면 그 항목만 환산 통화로 토글되어 보임 (`convertedBadges` Set, 새로고침하면 초기화되는 세션 상태).
+1. 사용자가 링크를 붙여넣으면 서버가 파싱해서 `price.currency`를 감지
+2 `currency !== 'KRW'`이면 frankfurter.app 환율로 즉시 변환해서 저장
+3. 화면에는 한화만 표시
+4. 좌측 사이드바 하단에 "기준환율" 표시 (참고용)
 
-## extractor.js 설계 — 실측으로 찾은 함정들
+**Puppeteer 동적 크롤링:**
+- 네이버 스마트스토어, 지마켓, 옥션 등 JS 렌더링 필요한 사이트는 Puppeteer로 처리
+- Cheerio (정적 파싱)보다 느리지만 더 많은 사이트 지원 가능
 
-1. **Accept-Language를 ko-KR로 보내면 안 됨** (또는 그것만으로는 못 막음). 일부 Shopify 스토어(zpacks.com 등)는 **접속 IP의 지역**에 따라 자동으로 다른 통화로 환산된 가격을 내려주면서 `og:price:currency` 태그는 원래 통화("USD")로 잘못 남겨둠. 실측: $749 → "1,085,000"을 "USD"라고 표기. 헤더를 en-US로 고정해도 IP 기반 지역 감지는 못 막는다.
-   - 대응: `MAX_REASONABLE_PRICE`로 통화별 "장비 하나 값으로는 비정상적인 금액" 상한을 두고, 넘으면 `confidence: 'low'`로 표시해 사용자가 검증하게 함. 완벽한 해결책은 아님 — 근본적으로 해외 IP 프록시 없이는 100% 막을 수 없는 문제.
-2. **무게 정보가 "관련 상품/추천 상품" 섹션에서 잘못 잡히는 문제.** 상품 페이지에는 다른 제품의 스펙(예: 업셀 상품의 무게)이 같이 있는 경우가 많음.
-   - 대응: `IRRELEVANT_SECTION_SELECTOR`로 관련상품/리뷰 영역을 먼저 제외하고, `PRODUCT_SECTION_SELECTOR`(본문/스펙 영역으로 추정되는 곳)를 우선 탐색. 거기서 못 찾으면 페이지 전체로 폴백하되 신뢰도를 낮춤.
-3. **일부 사이트는 봇을 차단함** (REI, Decathlon 등 → HTTP 403). User-Agent를 일반 브라우저처럼 위장해도 막히는 경우가 있고, 이건 우회하지 않는다 (완전 무료·합법적 스크래핑 범위 내에서만 동작). 실패하면 명확한 에러 메시지를 보여주고 사용자가 수동 입력하게 함.
+## 주의사항
 
-## 신뢰도(confidence) 시스템
+### 1. 환율 자동 변환
+- 서버에서 모든 가격을 KRW로 변환해서 저장
+- 원래 통화 정보는 `price_original` 필드에 참고용으로만 저장
+- 프론트에서는 환율 선택 UI 없음 (한화만)
 
-`/api/extract` 응답의 `price.confidence`, `weight.confidence`는 `'high' | 'medium' | 'low'`. 프론트(`script.js`의 `toggleLowConfidence`)는 `low`일 때 해당 입력창 테두리를 주황색(`--color-low-confidence`)으로 표시해서 사용자가 검증하도록 유도한다. **이 신호를 절대 없애지 말 것** — 자동 추출은 본질적으로 부정확할 수 있고, 이게 사용자에게 "확인이 필요하다"는 유일한 신호임.
+### 2. 드래그앤드롭 (아직 미구현)
+- 현재는 "추가 버튼"으로 팩에 장비를 추가
+- v2.1에서 드래그앤드롭 구현 예정 (좌측 마스터 리스트 → 중앙 테이블)
 
-## 의도적으로 안 만든 것 (로드맵)
+### 3. 이미지
+- 자동 추출은 불안정할 수 있음 (신뢰도 낮음)
+- 없으면 기본 🎒 이모지 표시
 
-- **제품명만으로 검색** (링크 없이 이름만 입력해서 사이트를 자동으로 찾아주는 기능): 무료로 안정적인 검색 수단이 마땅치 않음 (검색엔진 API는 대부분 유료/제한적). 필요해지면 DuckDuckGo HTML 스크래핑 등 조사 필요.
-- 여러 개 팩(가방) 관리, 데이터 내보내기/가져오기, 실제 배포 — 아직 미구현.
+### 4. 모바일
+- 태블릿 이하 해상도에서는 사이드바가 상단으로 이동 (flex-direction: column)
 
-## 스타일 컨벤션
+## 다음 단계
 
-- 화면에 보이는 텍스트는 전부 한국어.
-- 통화 포맷은 `script.js`의 `CURRENCY_META` / `formatMoney()`를 통해서만 하고, 새 통화를 추가할 땐 `CURRENCY_ORDER`와 `CURRENCY_META`에 같이 추가 + `server/rates.js`의 `SYMBOLS`에도 추가해야 환율을 받아올 수 있음.
-- 무게는 항상 내부적으로 grams(정수)로 저장하고, 표시할 때만 `formatWeight()`로 1000g 이상이면 kg로 변환.
+### Phase 2.1: UI 개선
+- [ ] 드래그앤드롭 (좌측 → 중앙)
+- [ ] 팩 복제 기능
+- [ ] 장비 수정 UI
 
-## 비주얼 디자인 — 울트라라이트 백패킹 정체성
+### Phase 2.2: 기능 확장
+- [ ] 팩 공유 (링크/QR)
+- [ ] 데이터 내보내기 (JSON, CSV, PDF)
+- [ ] 여행 날짜 기반 필터링
 
-**테마**: 등고선 지형도(topo map) + 실제 등산로 표식(trail blaze) 색상 + 저울 계기판 숫자.
+### Phase 3: 배포
+- [ ] Vercel/Render 무료 배포
+- [ ] 도메인 등록
 
-### 팔레트 (CSS 변수 + 다크 모드 지원)
-- `--bg-paper` (#EDE7D8): 지형도 용지 톤, 메인 배경
-- `--color-primary` (#2F4C3B): 파인 그린, 헤더/버튼/주요 텍스트
-- `--color-accent` (#E8590C): 트레일 블레이즈 오렌지, 강조/경고
-- `--color-topo` (#C9BFA0): 등고선 갈색, 분할선/테두리
-- `--color-low-confidence` (#C99A2E): 머스터드 옐로우, 신뢰도 낮음 표시
+## 개발 팁
 
-### 타이포
-- **본문/헤더**: 시스템 폰트(Pretendard 우선) — 한글 가독성
-- **모든 숫자** (무게, 가격, 통계): `JetBrains Mono` — "저울 눈금 읽기" 느낌
+**테스트 데이터 추가:**
+```js
+const testGears = [
+  {id: crypto.randomUUID(), name: 'Zpacks Duplex', category: '쉘터', weight: 505, price_krw: 999770, ...},
+  {id: crypto.randomUUID(), name: 'Western Mountaineering', category: '침낭', weight: 680, price_krw: 463670, ...}
+];
+localStorage.setItem('packpack_gears', JSON.stringify(testGears));
+location.reload();
+```
 
-### 시그니처 요소
-1. **헤더 등고선 패턴**: SVG 반복 패턴(페인트칠한 등고선 모양)
-2. **카테고리 트레일 블레이즈**: 실제 등산로 색상 코드
-   - 쉘터: 파랑(`#2C5F8A`)
-   - 수면: 자주(`#6B4A7A`)
-   - 조리: 머스터드(`#C99A2E`)
-   - 의류: 그레이(`#5C6670`)
-   - 신발: 갈색(`#8B5A2B`)
-   - 전자: 틸(`#2F7A6B`)
-   - 기타: 모랫빛(`#8A8368`)
-3. **행택(hang tag) 장비 카드**: 카드 좌상단에 실제 택처럼 움푹한 구멍 SVG 표시 (`.gear-item::before`)
+**로컬 개발:**
+```bash
+npm install
+npm run dev  # node --watch server/server.js
+# 또는
+npm start    # node server/server.js
+```
 
-### 다크 모드
-자동 지원(`@media prefers-color-scheme: dark`). 용지색 ↔ 어두운 톤으로 반전되고 명도 관계는 유지됨.
+## 알려진 문제
 
-### 반응형 세부사항
-- 통계 카드: 데스크톱 4열, 모바일 2열
-- `JetBrains Mono`는 폰트로 로드하지만 폴백이 있으므로 웹폰트 지연 시에도 서빙 가능
-- 모든 인터랙션에 `transition: all 0.2s ease` 적용 — 행택 위 마우스 오버 시 약간 들뜨는 느낌
-
-## 다음 개선 사항
-
-- 더 많은 트레일 블레이즈 카테고리 색상 추가(요청 시)
-- 헤더 SVG 등고선을 더 복잡하게 만들기(현재는 기본 4개 원 + 2개 경로)
-- 필터 칩의 활성 상태를 카테고리 색상으로 표현(현재는 그린)
+- REI, Decathlon 등 일부 사이트는 봇 차단 (HTTP 403)
+- Puppeteer는 무겁고 느림 (대안 검토 필요)
+- 모바일에서 도넛 차트가 작을 수 있음

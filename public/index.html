@@ -1,114 +1,153 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>PackPack — 장비 관리</title>
-<link rel="stylesheet" href="style.css" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PackPack — 장비 관리</title>
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <header class="topbar">
-    <h1>🏕️ PackPack<span>그램 단위로 장비를 관리한다</span></h1>
-    <p class="tagline">Pack with purpose, Travel with confidence</p>
-  </header>
+  <div class="app">
+    <!-- 좌측 사이드바: 리스트 관리 -->
+    <aside class="sidebar">
+      <header class="sidebar-header">
+        <h1>PackPack</h1>
+        <p class="tagline">그램 단위로 여행을 준비한다</p>
+      </header>
 
-  <main class="container">
-    <section class="rate-bar" aria-label="환산 통화 설정">
-      <label for="baseCurrencySelect">환산 통화</label>
-      <select id="baseCurrencySelect"></select>
-      <span class="rate-info" id="rateInfo">환율 불러오는 중...</span>
-    </section>
-
-    <section class="stats" aria-label="요약 통계">
-      <div class="stat-card">
-        <span class="stat-label">총 무게</span>
-        <span class="stat-value" id="statWeight">0 g</span>
-      </div>
-      <div class="stat-card">
-        <span class="stat-label">총 공식가</span>
-        <span class="stat-value" id="statOfficialPrice">-</span>
-      </div>
-      <div class="stat-card">
-        <span class="stat-label">총 실구매가</span>
-        <span class="stat-value" id="statActualPrice">-</span>
-      </div>
-      <div class="stat-card">
-        <span class="stat-label">장비 수</span>
-        <span class="stat-value" id="statCount">0</span>
-      </div>
-    </section>
-
-    <section class="add-panel" aria-label="장비 추가">
-      <h2>장비 추가</h2>
-
-      <div class="field-row">
-        <label for="linkInput">제품 링크 (선택)</label>
-        <div class="link-row">
-          <input type="url" id="linkInput" placeholder="https://... 제품 페이지 링크를 붙여넣으세요" />
-          <button type="button" id="autoFillBtn" class="btn secondary">🔍 자동 채우기</button>
+      <section class="sidebar-section">
+        <h2>
+          마스터 리스트
+          <span id="gearCountBadge" class="badge">0</span>
+        </h2>
+        <div class="sidebar-actions">
+          <button id="addGearBtn" class="btn-small primary">+ 장비 추가</button>
+          <button id="searchGearBtn" class="btn-small">🔍 검색</button>
         </div>
-        <p class="hint" id="autoFillHint"></p>
+        <ul id="gearList" class="gear-master-list"></ul>
+      </section>
+
+      <section class="sidebar-section">
+        <h2>
+          내 팩
+          <span id="packCountBadge" class="badge">0</span>
+        </h2>
+        <button id="newPackBtn" class="btn-small primary">+ 새 팩</button>
+        <ul id="packList" class="pack-list"></ul>
+      </section>
+
+      <footer class="sidebar-footer">
+        <p class="rate-info">
+          기준환율<br />
+          <span id="rateDisplay">로딩 중...</span>
+        </p>
+      </footer>
+    </aside>
+
+    <!-- 중앙 메인: 팩 상세 / 추가 폼 -->
+    <main class="main-content">
+      <!-- 팩이 선택되지 않았을 때 -->
+      <section id="emptyState" class="empty-state">
+        <h2>팩을 선택해주세요</h2>
+        <p>좌측에서 기존 팩을 선택하거나 새 팩을 만들어보세요.</p>
+      </section>
+
+      <!-- 팩 상세 화면 (선택되었을 때) -->
+      <section id="packDetail" class="pack-detail" hidden>
+        <header class="pack-header">
+          <h2 id="packName"></h2>
+          <div class="pack-actions">
+            <button id="shareBtn" class="btn-small">📤 공유</button>
+            <button id="settingsBtn" class="btn-small">⚙️ 설정</button>
+            <button id="deletePackBtn" class="btn-small danger">🗑️ 삭제</button>
+          </div>
+        </header>
+
+        <!-- 도넛 차트 + 통계 -->
+        <section class="pack-summary">
+          <div class="chart-container">
+            <canvas id="categoryChart"></canvas>
+          </div>
+          <div class="summary-stats">
+            <div class="stat">
+              <span class="label">총 무게</span>
+              <span id="totalWeight" class="value">0 g</span>
+            </div>
+            <div class="stat">
+              <span class="label">총 가격</span>
+              <span id="totalPrice" class="value">₩0</span>
+            </div>
+            <div class="stat">
+              <span class="label">장비 수</span>
+              <span id="itemCount" class="value">0</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- 카테고리별 테이블 -->
+        <section class="pack-items">
+          <div id="categoryTables"></div>
+        </section>
+      </section>
+
+      <!-- 장비 추가 모달 -->
+      <div id="addGearModal" class="modal" hidden>
+        <div class="modal-content">
+          <header class="modal-header">
+            <h2>장비 추가</h2>
+            <button id="closeModalBtn" class="close-btn">✕</button>
+          </header>
+          <form id="addGearForm">
+            <div class="form-row">
+              <label for="linkInput">제품 링크</label>
+              <div class="input-group">
+                <input type="url" id="linkInput" placeholder="https://..." />
+                <button type="button" id="autoFillBtn" class="btn-small">자동 채우기</button>
+              </div>
+            </div>
+            <p id="autoFillHint" class="hint"></p>
+
+            <div class="form-row">
+              <label for="nameInput">제품명 *</label>
+              <input type="text" id="nameInput" required placeholder="예: Zpacks Duplex" />
+            </div>
+
+            <div class="form-grid">
+              <div class="form-row">
+                <label for="categoryInput">카테고리</label>
+                <select id="categoryInput">
+                  <option value="쉘터">쉘터</option>
+                  <option value="침낭">침낭</option>
+                  <option value="매트">매트</option>
+                  <option value="의류">의류</option>
+                  <option value="신발">신발</option>
+                  <option value="전자기기">전자기기</option>
+                  <option value="조리">조리</option>
+                  <option value="기타" selected>기타</option>
+                </select>
+              </div>
+              <div class="form-row">
+                <label for="weightInput">무게 (g) *</label>
+                <input type="number" id="weightInput" required min="0" step="1" placeholder="505" />
+              </div>
+              <div class="form-row">
+                <label for="priceInput">가격 (₩) *</label>
+                <input type="number" id="priceInput" required min="0" step="100" placeholder="999770" />
+              </div>
+            </div>
+
+            <div class="form-actions">
+              <button type="submit" class="btn primary">추가</button>
+              <button type="button" id="cancelBtn" class="btn secondary">취소</button>
+            </div>
+          </form>
+        </div>
       </div>
+    </main>
+  </div>
 
-      <form id="gearForm">
-        <div class="field-grid">
-          <div class="field-row">
-            <label for="nameInput">제품명 *</label>
-            <input type="text" id="nameInput" required placeholder="예: Salomon XT-6" />
-          </div>
-          <div class="field-row">
-            <label for="categoryInput">카테고리</label>
-            <select id="categoryInput">
-              <option value="쉘터">쉘터</option>
-              <option value="수면">수면</option>
-              <option value="조리">조리</option>
-              <option value="의류">의류</option>
-              <option value="신발">신발</option>
-              <option value="전자">전자</option>
-              <option value="기타" selected>기타</option>
-            </select>
-          </div>
-          <div class="field-row">
-            <label for="weightInput">무게 (g)</label>
-            <input type="number" id="weightInput" min="0" step="1" placeholder="0" />
-          </div>
-          <div class="field-row">
-            <label for="currencyInput">통화</label>
-            <select id="currencyInput"></select>
-          </div>
-          <div class="field-row">
-            <label for="officialPriceInput">공식 가격</label>
-            <input type="number" id="officialPriceInput" min="0" step="0.01" placeholder="0" />
-          </div>
-          <div class="field-row">
-            <label for="actualPriceInput">실구매 가격</label>
-            <input type="number" id="actualPriceInput" min="0" step="0.01" placeholder="0" />
-            <p class="hint">할인/중고 구매 등으로 실제 지불한 금액. 비워두면 공식 가격과 같게 저장돼요.</p>
-          </div>
-        </div>
-
-        <div class="preview" id="autoFillPreview" hidden>
-          <img id="previewImg" alt="" />
-          <div class="preview-info">
-            <p id="previewSite" class="preview-site"></p>
-            <p id="previewDesc" class="preview-desc"></p>
-          </div>
-        </div>
-
-        <button type="submit" class="btn primary">+ 리스트에 추가</button>
-      </form>
-    </section>
-
-    <section class="filter-panel" aria-label="카테고리 필터">
-      <div id="filterButtons" class="filter-buttons"></div>
-    </section>
-
-    <section class="list-panel" aria-label="장비 리스트">
-      <ul id="gearList" class="gear-list"></ul>
-      <p id="emptyState" class="empty-state">아직 등록된 장비가 없어요. 위에서 추가해 보세요!</p>
-    </section>
-  </main>
-
+  <!-- Chart.js for donut chart -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="script.js"></script>
 </body>
 </html>
