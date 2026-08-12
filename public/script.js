@@ -16,7 +16,8 @@ const CATEGORIES = ['쉘터', '침낭', '매트', '의류', '신발', '전자기
 let gears = [];
 let packs = [];
 let selectedPackId = null;
-let currentView = 'welcome'; // 'welcome' | 'inventory' | 'pack'
+let currentView = 'welcome'; // 'welcome' | 'inventory' | 'pack' | 'share'
+let sharedPackPayload = null; // 공유 링크로 열었을 때만 채워짐
 let rates = null;
 
 const $ = (sel) => document.querySelector(sel);
@@ -46,6 +47,29 @@ function formatWeight(grams) {
   return `${grams} g`;
 }
 
+// ============================================
+// 공유 링크 인코딩/디코딩 (서버 저장 없음 — gzip 압축 후 URL에 그대로 넣음)
+// ============================================
+async function encodeSharePayload(obj) {
+  const json = JSON.stringify(obj);
+  const stream = new Blob([json]).stream().pipeThrough(new CompressionStream('gzip'));
+  const buf = await new Response(stream).arrayBuffer();
+  let binary = '';
+  new Uint8Array(buf).forEach((b) => (binary += String.fromCharCode(b)));
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+async function decodeSharePayload(encoded) {
+  const b64 = encoded.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
+  const binary = atob(padded);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+  const buf = await new Response(stream).arrayBuffer();
+  return JSON.parse(new TextDecoder().decode(buf));
+}
+
 function fadeInEl(el) {
   animate(el, { opacity: [0, 1], transform: ['scale(0.94)', 'scale(1)'] }, { duration: 0.22, easing: 'ease-out' });
 }
@@ -73,6 +97,7 @@ function showView(view) {
   $('#welcomeView').hidden = view !== 'welcome';
   $('#inventoryView').hidden = view !== 'inventory';
   $('#packView').hidden = view !== 'pack';
+  $('#shareView').hidden = view !== 'share';
   renderNav();
 }
 
@@ -506,6 +531,58 @@ $('#welcomeAddGearBtn').addEventListener('click', openAddGearModal);
 $('#closeModalBtn').addEventListener('click', closeAddGearModal);
 $('#cancelBtn').addEventListener('click', closeAddGearModal);
 $('#deletePackBtn').addEventListener('click', deletePack);
+$('#importSharedBtn').addEventListener('click', importSharedPack);
+
+$('#sharePackBtn').addEventListener('click', async () => {
+  const pack = packs.find((p) => p.id === selectedPackId);
+  if (!pack) return;
+
+  const packItems = pack.items
+    .map((item) => {
+      const gear = gears.find((g) => g.id === item.gear_id);
+      return gear
+        ? {
+            name: gear.name,
+            category: gear.category,
+            weight: gear.weight,
+            price_krw: gear.price_krw,
+            quantity: item.quantity,
+            image: gear.image || null,
+            source_url: gear.source_url || null,
+          }
+        : null;
+    })
+    .filter(Boolean);
+
+  const hint = $('#shareHint');
+  if (packItems.length === 0) {
+    hint.textContent = '공유할 장비가 없어요. 팩에 장비를 먼저 담아주세요.';
+    hint.className = 'hint error';
+    hint.hidden = false;
+    return;
+  }
+
+  const btn = $('#sharePackBtn');
+  const original = btn.textContent;
+  btn.textContent = '생성 중...';
+  btn.disabled = true;
+
+  try {
+    const encoded = await encodeSharePayload({ name: pack.name, items: packItems });
+    const url = `${location.origin}${location.pathname}?share=${encoded}`;
+    await navigator.clipboard.writeText(url);
+    hint.textContent = '읽기전용 공유 링크를 클립보드에 복사했어요!';
+    hint.className = 'hint success';
+    hint.hidden = false;
+  } catch (err) {
+    hint.textContent = `공유 링크 생성에 실패했어요: ${err.message}`;
+    hint.className = 'hint error';
+    hint.hidden = false;
+  } finally {
+    btn.textContent = original;
+    btn.disabled = false;
+  }
+});
 
 $('#resetDataBtn').addEventListener('click', () => {
   if (!confirm('모든 장비와 팩 데이터를 삭제할까요? 되돌릴 수 없어요.')) return;
@@ -579,6 +656,135 @@ $('#addGearForm').addEventListener('submit', (e) => {
   renderNav();
 });
 
+// ============================================
+// 공유받은 팩 (읽기전용) 렌더링 + 가져오기
+// ============================================
+function renderShareView(payload) {
+  $('#sharePackName').textContent = payload.name || '(제목 없음)';
+  const items = payload.items;
+
+  const totalWeight = items.reduce((s, g) => s + g.weight * g.quantity, 0);
+  const totalPrice = items.reduce((s, g) => s + g.price_krw * g.quantity, 0);
+  $('#shareTotalWeight').textContent = formatWeight(totalWeight);
+  $('#shareTotalPrice').textContent = formatPrice(totalPrice);
+  $('#shareItemCount').textContent = items.length;
+
+  renderShareChart(items);
+  renderShareCategoryTables(items);
+}
+
+function renderShareChart(items) {
+  const byCategory = {};
+  items.forEach((item) => {
+    byCategory[item.category] = (byCategory[item.category] || 0) + item.weight * item.quantity;
+  });
+
+  const ctx = $('#shareChart').getContext('2d');
+  if (window.shareChartInstance) window.shareChartInstance.destroy();
+  if (Object.keys(byCategory).length === 0) return;
+
+  window.shareChartInstance = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: Object.keys(byCategory),
+      datasets: [
+        {
+          data: Object.values(byCategory),
+          backgroundColor: ['#c2603d', '#4e8c6b', '#6b7fd7', '#c99a2e', '#8b5cf6', '#2f7a6b', '#c1443a', '#8a8578'],
+          borderWidth: 0,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      cutout: '65%',
+      plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 11 } } } },
+    },
+  });
+}
+
+function renderShareCategoryTables(items) {
+  const container = $('#shareCategoryTables');
+  container.innerHTML = '';
+
+  const byCategory = {};
+  items.forEach((item) => {
+    if (!byCategory[item.category]) byCategory[item.category] = [];
+    byCategory[item.category].push(item);
+  });
+
+  Object.entries(byCategory).forEach(([category, categoryItems]) => {
+    const totalW = categoryItems.reduce((s, i) => s + i.weight * i.quantity, 0);
+    const totalP = categoryItems.reduce((s, i) => s + i.price_krw * i.quantity, 0);
+
+    const section = document.createElement('div');
+    section.className = 'category-section';
+    section.innerHTML = `
+      <div class="category-header">
+        <span>${category}</span>
+        <span>${formatWeight(totalW)} · ${formatPrice(totalP)}</span>
+      </div>
+      <table class="category-table">
+        <thead><tr><th>상품</th><th>무게</th><th>가격</th><th>수량</th></tr></thead>
+        <tbody>
+          ${categoryItems
+            .map(
+              (item) => `
+            <tr>
+              <td class="gear-name">
+                <div class="gear-thumb">${item.image ? `<img src="${item.image}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">` : '🎒'}</div>
+                <div class="gear-info">
+                  <strong>${escapeHtml(item.name)}</strong>
+                  ${item.source_url ? `<a href="${item.source_url}" target="_blank" rel="noopener">보기 →</a>` : ''}
+                </div>
+              </td>
+              <td>${formatWeight(item.weight)}</td>
+              <td>${formatPrice(item.price_krw)}</td>
+              <td>${item.quantity}</td>
+            </tr>
+          `
+            )
+            .join('')}
+        </tbody>
+      </table>
+    `;
+    container.appendChild(section);
+  });
+}
+
+function importSharedPack() {
+  if (!sharedPackPayload) return;
+
+  const items = sharedPackPayload.items.map((item) => {
+    const newGear = {
+      id: crypto.randomUUID(),
+      name: item.name,
+      category: item.category,
+      weight: item.weight,
+      price_krw: item.price_krw,
+      source_url: item.source_url || null,
+      image: item.image || null,
+      created_at: new Date().toISOString(),
+    };
+    gears.push(newGear);
+    return { gear_id: newGear.id, quantity: item.quantity };
+  });
+
+  const newPack = {
+    id: crypto.randomUUID(),
+    name: `${sharedPackPayload.name || '공유받은 팩'} (가져옴)`,
+    items,
+    created_at: new Date().toISOString(),
+  };
+  packs.push(newPack);
+  saveData();
+
+  history.replaceState(null, '', location.pathname); // ?share= 파라미터 제거
+  sharedPackPayload = null;
+  openPack(newPack.id);
+}
+
 function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = str;
@@ -588,14 +794,33 @@ function escapeHtml(str) {
 // ============================================
 // 초기화
 // ============================================
+function initNormalView() {
+  if (gears.length === 0 && packs.length === 0) {
+    showView('welcome');
+  } else if (packs.length > 0) {
+    openPack(packs.slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0].id);
+  } else {
+    openInventory();
+  }
+}
+
 loadData();
 loadRates();
 renderNav();
 
-if (gears.length === 0 && packs.length === 0) {
-  showView('welcome');
-} else if (packs.length > 0) {
-  openPack(packs.slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0].id);
+const shareParam = new URLSearchParams(location.search).get('share');
+if (shareParam) {
+  decodeSharePayload(shareParam)
+    .then((payload) => {
+      sharedPackPayload = payload;
+      showView('share');
+      renderShareView(payload);
+    })
+    .catch(() => {
+      alert('공유 링크를 읽을 수 없어요. 링크가 손상됐거나 만료됐을 수 있어요.');
+      history.replaceState(null, '', location.pathname);
+      initNormalView();
+    });
 } else {
-  openInventory();
+  initNormalView();
 }

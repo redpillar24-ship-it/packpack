@@ -71,9 +71,11 @@
           </div>
           <div class="pack-actions">
             <button id="addGearBtnPack" class="btn-icon" title="새 장비 등록">+ 장비</button>
+            <button id="sharePackBtn" class="btn-icon" title="읽기전용 공유 링크 복사">🔗 공유</button>
             <button id="deletePackBtn" class="btn-icon danger" title="팩 삭제">삭제</button>
           </div>
         </header>
+        <p id="shareHint" class="hint" hidden></p>
 
         <section class="pack-summary">
           <div class="chart-container">
@@ -112,6 +114,39 @@
             </div>
           </div>
         </div>
+      </section>
+
+      <!-- 공유받은 팩 읽기전용 화면 -->
+      <section id="shareView" class="view share-view" hidden>
+        <header class="view-header">
+          <div>
+            <h1 id="sharePackName"></h1>
+            <p class="view-subtitle">읽기전용 공유 링크로 보는 중이에요</p>
+          </div>
+          <button id="importSharedBtn" class="btn primary">내 리스트로 가져오기</button>
+        </header>
+
+        <section class="pack-summary">
+          <div class="chart-container">
+            <canvas id="shareChart"></canvas>
+          </div>
+          <div class="summary-stats">
+            <div class="stat">
+              <span class="label">총 무게</span>
+              <span id="shareTotalWeight" class="value">0 g</span>
+            </div>
+            <div class="stat">
+              <span class="label">총 가격</span>
+              <span id="shareTotalPrice" class="value">₩0</span>
+            </div>
+            <div class="stat">
+              <span class="label">장비 수</span>
+              <span id="shareItemCount" class="value">0</span>
+            </div>
+          </div>
+        </section>
+
+        <div id="shareCategoryTables"></div>
       </section>
 
       <!-- 장비 추가 모달 -->
