@@ -5,7 +5,36 @@
 const cheerio = require('cheerio');
 
 const WEIGHT_REGEX = /(\d[\d,.]*)\s*(kilograms?|kg|grams?|g|pounds?|lbs?|lb|ounces?|oz)\b/i;
-const PRICE_SYMBOL_REGEX = /([₩$€£¥])\s?([\d][\d,.]*)|([\d][\d,.]*)\s?(원|USD|KRW|EUR)/;
+const PRICE_SYMBOL_REGEX = /([₩$€£¥])\s?([\d][\d,.]*)|([\d][\d,.]*)\s?(원|USD|KRW|EUR|JPY|GBP|CNY)/;
+
+// 기호만으로 통화를 표기하는 사이트가 많아서 ISO 코드로 정규화.
+// ¥는 엔화/위안화 둘 다 쓰이는데, 국가 감지가 안 될 때는 더 흔한 엔화(JPY)를 기본값으로 삼는다.
+const SYMBOL_TO_CURRENCY = { '₩': 'KRW', $: 'USD', '€': 'EUR', '£': 'GBP', '¥': 'JPY' };
+
+// 통화 코드가 전혀 안 잡힐 때 도메인(TLD)으로 대략 추론 (신뢰도는 낮게 취급).
+function guessCurrencyFromUrl(url) {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    if (host.endsWith('.kr')) return 'KRW';
+    if (host.endsWith('.jp')) return 'JPY';
+    if (host.endsWith('.cn')) return 'CNY';
+    if (host.endsWith('.uk') || host.endsWith('.co.uk')) return 'GBP';
+    if (/\.(de|fr|es|it|nl|ie|at|fi|pt|be|lu)$/.test(host)) return 'EUR';
+    return 'USD'; // .com 등은 기본적으로 달러로 가정
+  } catch {
+    return null;
+  }
+}
+
+// 통화별로 "장비 하나 값"으로는 비정상적으로 큰 금액 기준 (초과하면 저신뢰도 처리).
+const MAX_REASONABLE_PRICE = {
+  KRW: 15_000_000,
+  JPY: 1_500_000,
+  CNY: 70_000,
+  USD: 10_000,
+  EUR: 10_000,
+  GBP: 10_000,
+};
 
 // 일반 브라우저처럼 보이게 하는 헤더. 없으면 많은 쇼핑몰이 요청을 막음.
 // 주의: Accept-Language를 ko-KR로 보내면 일부 해외 쇼핑몰(예: Shopify 기반 스토어)이
@@ -113,7 +142,10 @@ function extractPrice($, productLd) {
     const text = $(el).text().trim().replace(/\s+/g, ' ');
     if (!text || text.length > 40) return;
     const m = text.match(PRICE_SYMBOL_REGEX);
-    if (m) found = { value: (m[2] || m[3]).replace(/,/g, ''), currency: m[1] || m[4] || null, source: 'heuristic', raw: m[0] };
+    if (m) {
+      const currency = m[1] ? SYMBOL_TO_CURRENCY[m[1]] : m[4] === '원' ? 'KRW' : m[4] || null;
+      found = { value: (m[2] || m[3]).replace(/,/g, ''), currency, source: 'heuristic', raw: m[0] };
+    }
   });
   return found;
 }
@@ -195,19 +227,22 @@ function extractDescription($, productLd) {
 
 // 일부 해외 쇼핑몰(특히 Shopify Markets)은 접속 IP의 지역에 따라 자동으로 다른 통화로
 // 환산된 가격을 내려주면서도 currency 태그는 원래 통화("USD" 등)로 잘못 남겨두는 경우가 있음.
-// 완전히 막을 방법은 없어서, "USD인데 금액이 비정상적으로 큰 경우" 등 명백히 이상한 조합은
-// 신뢰도를 낮춰서 사용자가 직접 확인하도록 함.
-function buildPriceResult(price) {
+// 완전히 막을 방법은 없어서, 통화 대비 금액이 비정상적으로 큰 경우는 신뢰도를 낮춰서
+// 사용자가 직접 확인하도록 함. 통화 자체가 안 잡히면 도메인으로 추론하되 저신뢰도로 표시.
+function buildPriceResult(price, url) {
   const amount = Number(price.value);
+  let currency = price.currency;
   let confidence = price.source === 'jsonld' || price.source === 'meta' ? 'high' : 'low';
 
-  const suspicious =
-    (price.currency === 'USD' && amount > 10000) ||
-    (price.currency === 'EUR' && amount > 10000) ||
-    (price.currency === 'KRW' && amount > 0 && amount < 100);
-  if (suspicious) confidence = 'low';
+  if (!currency) {
+    currency = guessCurrencyFromUrl(url);
+    confidence = 'low';
+  }
 
-  return { amount: price.value, currency: price.currency, confidence };
+  const max = MAX_REASONABLE_PRICE[currency];
+  if (max && amount > max) confidence = 'low';
+
+  return { amount: price.value, currency, confidence };
 }
 
 function extractSiteName($, url) {
@@ -239,7 +274,7 @@ async function extractProductInfo(url) {
     name: title,
     image,
     description,
-    price: price ? buildPriceResult(price) : null,
+    price: price ? buildPriceResult(price, url) : null,
     weight: weight
       ? { grams: toGrams(weight), raw: weight.raw, confidence: weight.scoped ? 'medium' : 'low' }
       : null,

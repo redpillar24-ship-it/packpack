@@ -49,12 +49,43 @@ body {
   padding: 20px 16px 60px;
 }
 
+/* ---- Rate bar ---- */
+.rate-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  font-size: 0.82rem;
+}
+
+.rate-bar label {
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.rate-bar select {
+  width: auto;
+  padding: 4px 8px;
+  font-size: 0.85rem;
+}
+
+.rate-info {
+  color: var(--color-text-muted);
+}
+
 /* ---- Stats ---- */
 .stats {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 10px;
   margin-bottom: 20px;
+}
+
+@media (min-width: 480px) {
+  .stats {
+    grid-template-columns: repeat(4, 1fr);
+  }
 }
 
 .stat-card {
@@ -75,9 +106,10 @@ body {
 
 .stat-value {
   display: block;
-  font-size: 1.25rem;
+  font-size: 1.05rem;
   font-weight: 700;
   color: var(--color-primary-dark);
+  word-break: keep-all;
 }
 
 /* ---- Add panel ---- */
@@ -337,6 +369,31 @@ select:focus {
   border-radius: 4px;
   padding: 1px 6px;
   font-size: 0.75rem;
+}
+
+.price-badge {
+  border: none;
+  background: #f3efe2;
+  color: var(--color-text);
+  border-radius: 4px;
+  padding: 1px 7px;
+  font-size: 0.78rem;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.price-badge:hover {
+  background: #e9e2cc;
+}
+
+.price-badge.converted {
+  background: #e2ede5;
+  color: var(--color-primary-dark);
+}
+
+.price-badge .price-label {
+  opacity: 0.65;
+  margin-right: 2px;
 }
 
 .gear-actions {

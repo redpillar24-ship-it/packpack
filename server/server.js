@@ -7,6 +7,7 @@ const path = require('path');
 const express = require('express');
 const cors = require('cors');
 const { extractProductInfo } = require('./extractor');
+const { getRates } = require('./rates');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -37,6 +38,16 @@ app.post('/api/extract', async (req, res) => {
   } catch (err) {
     console.error('[extract]', url, err.message);
     res.status(502).json({ error: err.message || '정보를 가져오는 중 오류가 발생했습니다.' });
+  }
+});
+
+app.get('/api/rates', async (req, res) => {
+  try {
+    const data = await getRates();
+    res.json(data);
+  } catch (err) {
+    console.error('[rates]', err.message);
+    res.status(502).json({ error: err.message });
   }
 });
 

@@ -13,14 +13,24 @@
   </header>
 
   <main class="container">
+    <section class="rate-bar" aria-label="환산 통화 설정">
+      <label for="baseCurrencySelect">환산 통화</label>
+      <select id="baseCurrencySelect"></select>
+      <span class="rate-info" id="rateInfo">환율 불러오는 중...</span>
+    </section>
+
     <section class="stats" aria-label="요약 통계">
       <div class="stat-card">
         <span class="stat-label">총 무게</span>
         <span class="stat-value" id="statWeight">0 g</span>
       </div>
       <div class="stat-card">
-        <span class="stat-label">총 가격</span>
-        <span class="stat-value" id="statPrice">$0</span>
+        <span class="stat-label">총 공식가</span>
+        <span class="stat-value" id="statOfficialPrice">-</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">총 실구매가</span>
+        <span class="stat-value" id="statActualPrice">-</span>
       </div>
       <div class="stat-card">
         <span class="stat-label">장비 수</span>
@@ -63,8 +73,17 @@
             <input type="number" id="weightInput" min="0" step="1" placeholder="0" />
           </div>
           <div class="field-row">
-            <label for="priceInput">가격 ($)</label>
-            <input type="number" id="priceInput" min="0" step="0.01" placeholder="0.00" />
+            <label for="currencyInput">통화</label>
+            <select id="currencyInput"></select>
+          </div>
+          <div class="field-row">
+            <label for="officialPriceInput">공식 가격</label>
+            <input type="number" id="officialPriceInput" min="0" step="0.01" placeholder="0" />
+          </div>
+          <div class="field-row">
+            <label for="actualPriceInput">실구매 가격</label>
+            <input type="number" id="actualPriceInput" min="0" step="0.01" placeholder="0" />
+            <p class="hint">할인/중고 구매 등으로 실제 지불한 금액. 비워두면 공식 가격과 같게 저장돼요.</p>
           </div>
         </div>
 
