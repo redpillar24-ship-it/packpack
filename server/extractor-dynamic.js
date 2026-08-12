@@ -58,15 +58,23 @@ async function closeBrowser() {
 // 제품 페이지 분석해서 이름/이미지/가격 추출
 async function extractFromDynamicSite(url) {
   const page = await (await initBrowser()).newPage();
-  const timeout = 10000;
+  const timeout = 15000; // 15초로 증가
 
   try {
     page.setDefaultTimeout(timeout);
     page.setDefaultNavigationTimeout(timeout);
 
+    // 더 permissive한 대기 조건
     await page.goto(url, {
-      waitUntil: 'networkidle2',
+      waitUntil: 'domcontentloaded', // networkidle2 대신 더 빠른 옵션
+      timeout: 12000,
+    }).catch(() => {
+      // 로드 실패해도 계속 진행 (일부 페이지는 느릴 수 있음)
+      console.log('[extractor-dynamic] 페이지 로드 경고 (계속 진행)');
     });
+
+    // 추가 대기 (JavaScript 렌더링 완료)
+    await new Promise(resolve => setTimeout(resolve, 2000)).catch(() => {});
 
     // 기본 정보 추출
     const pageData = await page.evaluate(() => {
@@ -82,27 +90,32 @@ async function extractFromDynamicSite(url) {
         ogCurrency: document.querySelector('meta[property="og:price:currency"]')?.content,
         ogImage: document.querySelector('meta[property="og:image"]')?.content,
         ogDescription: document.querySelector('meta[property="og:description"]')?.content,
-        bodyText: document.body.innerText.slice(0, 1000), // 처음 1000자만
+        bodyText: document.body.innerText.slice(0, 2000), // 2000자까지 확대
       };
     });
 
-    // 가격 추출 (숫자 패턴)
-    const priceMatch = pageData.bodyText.match(/[\d,]+(?:원|₩|\$|€)?/);
-    const price = priceMatch ? priceMatch[0].replace(/,/g, '') : null;
+    // 가격 추출 (숫자 패턴) — 한화 우선
+    const krwMatch = pageData.bodyText.match(/[\d,]+(?:원|₩)/);
+    const priceMatch = krwMatch || pageData.bodyText.match(/[\d,]+(?:원|₩|\$|€)?/);
+    const price = priceMatch ? priceMatch[0].replace(/,/g, '').replace(/원|₩|\$|€/g, '') : null;
 
     // 결과 조합
     return {
       sourceUrl: url,
-      name: pageData.ogTitle || pageData.title,
+      siteName: '네이버 스마트스토어',
+      name: pageData.ogTitle || pageData.title || null,
       image: pageData.ogImage,
       price: price ? { amount: price, currency: 'KRW', confidence: 'low' } : null,
       description: pageData.ogDescription,
       weight: null, // 일반적으로 상품 상세에서 수동 입력 필요
     };
   } catch (err) {
-    throw new Error(`Puppeteer 크롤링 실패: ${err.message}`);
+    console.error('[extractor-dynamic] 상세 에러:', err);
+    throw new Error(`네이버 스마트스토어 크롤링 실패: ${err.message}`);
   } finally {
-    await page.close();
+    try {
+      await page.close();
+    } catch {}
   }
 }
 
