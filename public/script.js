@@ -6,6 +6,18 @@ const STORAGE_KEY = 'packpack_gears';
 const BASE_CURRENCY_KEY = 'packpack_base_currency';
 const CATEGORIES = ['쉘터', '수면', '조리', '의류', '신발', '전자', '기타'];
 
+// 실제 등산로 표식(트레일 블레이즈)에서 쓰이는 색 코드에서 따온 카테고리 색상.
+// 카테고리를 한눈에 구분하는 용도이자, 이 앱의 시그니처 비주얼 장치.
+const CATEGORY_COLORS = {
+  쉘터: '#2C5F8A',
+  수면: '#6B4A7A',
+  조리: '#C99A2E',
+  의류: '#5C6670',
+  신발: '#8B5A2B',
+  전자: '#2F7A6B',
+  기타: '#8A8368',
+};
+
 // 통화 표기 규칙: 원/엔은 소수점 없이, 그 외는 소수점 둘째 자리까지.
 const CURRENCY_META = {
   KRW: { symbol: '₩', decimals: 0, label: 'KRW (원)' },
@@ -297,6 +309,7 @@ function sumConverted(list) {
 function renderGearItem(gear) {
   const li = document.createElement('li');
   li.className = 'gear-item';
+  li.setAttribute('data-category', gear.category);
 
   const thumb = document.createElement(gear.image ? 'img' : 'div');
   thumb.className = 'gear-thumb' + (gear.image ? '' : ' placeholder');
@@ -329,9 +342,11 @@ function renderGearItem(gear) {
   const categoryTag = document.createElement('span');
   categoryTag.className = 'gear-tag';
   categoryTag.textContent = gear.category;
+  categoryTag.style.backgroundColor = CATEGORY_COLORS[gear.category];
   meta.appendChild(categoryTag);
 
   const weightTag = document.createElement('span');
+  weightTag.className = 'gear-weight';
   weightTag.textContent = formatWeight(gear.weight);
   meta.appendChild(weightTag);
 
