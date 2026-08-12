@@ -1,24 +1,26 @@
 // public/script.js
-// PackPack v2: 마스터 리스트 + 팩 시스템
+// PackPack v3: Claude 앱 스타일 UI + 네이티브 드래그앤드롭 + motion(Framer Motion) 애니메이션
+
+import { animate } from 'https://cdn.jsdelivr.net/npm/motion@11/+esm';
 
 const STORAGE = {
   GEARS: 'packpack_gears',
   PACKS: 'packpack_packs',
 };
 
-// ============================================
-// 상태 관리
-// ============================================
-let gears = []; // 마스터 장비 리스트
-let packs = []; // 팩 목록
-let selectedPackId = null; // 현재 선택된 팩
-let rates = null; // 환율 정보
+const CATEGORIES = ['쉘터', '침낭', '매트', '의류', '신발', '전자기기', '조리', '기타'];
 
 // ============================================
-// 유틸리티
+// 상태
 // ============================================
-const $ = (selector) => document.querySelector(selector);
-const $$ = (selector) => document.querySelectorAll(selector);
+let gears = [];
+let packs = [];
+let selectedPackId = null;
+let currentView = 'welcome'; // 'welcome' | 'inventory' | 'pack'
+let rates = null;
+
+const $ = (sel) => document.querySelector(sel);
+const $$ = (sel) => document.querySelectorAll(sel);
 
 function loadData() {
   try {
@@ -44,15 +46,19 @@ function formatWeight(grams) {
   return `${grams} g`;
 }
 
+function fadeInEl(el) {
+  animate(el, { opacity: [0, 1], transform: ['scale(0.94)', 'scale(1)'] }, { duration: 0.22, easing: 'ease-out' });
+}
+
 // ============================================
-// 환율 로드
+// 환율
 // ============================================
 async function loadRates() {
   try {
     const res = await fetch('/api/rates');
     if (res.ok) {
       rates = await res.json();
-      $('#rateDisplay').textContent = `USD → KRW ${rates.rates.KRW.toFixed(0)}\n(${rates.date})`;
+      $('#rateDisplay').textContent = `기준환율 USD→KRW ${rates.rates.KRW.toFixed(0)} (${rates.date})`;
     }
   } catch {
     $('#rateDisplay').textContent = '환율 로드 실패';
@@ -60,78 +66,161 @@ async function loadRates() {
 }
 
 // ============================================
-// UI: 마스터 리스트 렌더링
+// 뷰 전환
 // ============================================
-function renderGearList() {
-  const list = $('#gearList');
-  list.innerHTML = '';
-  $('#gearCountBadge').textContent = gears.length;
-
-  if (gears.length === 0) {
-    list.innerHTML = '<li class="empty">등록된 장비가 없어요</li>';
-    return;
-  }
-
-  // 카테고리별 그룹화
-  const byCategory = {};
-  gears.forEach((g) => {
-    if (!byCategory[g.category]) byCategory[g.category] = [];
-    byCategory[g.category].push(g);
-  });
-
-  Object.entries(byCategory).forEach(([cat, items]) => {
-    const li = document.createElement('li');
-    li.innerHTML = `
-      <strong>${cat}</strong>
-      <div class="gear-sublist">
-        ${items.map((g) => `
-          <div class="gear-item">
-            <span>${g.name}</span>
-            <span class="gear-meta">${formatWeight(g.weight)} | ${formatPrice(g.price_krw)}</span>
-          </div>
-        `).join('')}
-      </div>
-    `;
-    list.appendChild(li);
-  });
+function showView(view) {
+  currentView = view;
+  $('#welcomeView').hidden = view !== 'welcome';
+  $('#inventoryView').hidden = view !== 'inventory';
+  $('#packView').hidden = view !== 'pack';
+  renderNav();
 }
 
 // ============================================
-// UI: 팩 목록 렌더링
+// 네비게이션 렌더링
 // ============================================
-function renderPackList() {
+function renderNav() {
+  $('#gearCountBadge').textContent = gears.length;
+  $('#showInventoryBtn').classList.toggle('active', currentView === 'inventory');
+
   const list = $('#packList');
   list.innerHTML = '';
-  $('#packCountBadge').textContent = packs.length;
 
-  packs.forEach((p) => {
-    const li = document.createElement('li');
-    li.textContent = p.name;
-    li.className = p.id === selectedPackId ? 'active' : '';
-    li.addEventListener('click', () => selectPack(p.id));
-    list.appendChild(li);
-  });
-}
-
-// ============================================
-// UI: 팩 상세 화면
-// ============================================
-function selectPack(packId) {
-  selectedPackId = packId;
-  const pack = packs.find((p) => p.id === packId);
-
-  if (!pack) {
-    $('#packDetail').hidden = true;
-    $('#emptyState').hidden = false;
-    renderPackList();
+  if (packs.length === 0) {
+    list.innerHTML = '<li class="empty-hint">아직 팩이 없어요</li>';
     return;
   }
 
-  $('#emptyState').hidden = true;
-  $('#packDetail').hidden = false;
+  packs
+    .slice()
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    .forEach((p) => {
+      const li = document.createElement('li');
+      li.textContent = p.name || '(제목 없음)';
+      li.className = currentView === 'pack' && p.id === selectedPackId ? 'active' : '';
+      li.addEventListener('click', () => openPack(p.id));
+      list.appendChild(li);
+    });
+}
+
+// ============================================
+// 인벤토리(마스터 리스트) 화면
+// ============================================
+function openInventory() {
+  showView('inventory');
+  renderInventoryView();
+}
+
+function renderInventoryView(filter = '') {
+  const grid = $('#inventoryGrid');
+  grid.innerHTML = '';
+
+  const q = filter.trim().toLowerCase();
+  const visible = gears.filter((g) => g.name.toLowerCase().includes(q));
+
+  if (gears.length === 0) {
+    grid.innerHTML = '<p class="empty-note">등록된 장비가 없어요. "+ 장비 추가"로 시작해보세요.</p>';
+    return;
+  }
+  if (visible.length === 0) {
+    grid.innerHTML = '<p class="empty-note">검색 결과가 없어요.</p>';
+    return;
+  }
+
+  visible.forEach((g) => {
+    const card = document.createElement('div');
+    card.className = 'inv-card';
+    card.innerHTML = `
+      <div class="inv-card-top">
+        <div class="inv-thumb">${g.image ? `<img src="${g.image}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">` : '🎒'}</div>
+        <div style="min-width:0">
+          <span class="inv-card-cat">${g.category}</span>
+          <div class="inv-card-name">${escapeHtml(g.name)}</div>
+        </div>
+      </div>
+      <div class="inv-card-meta">
+        <span>${formatWeight(g.weight)} · ${formatPrice(g.price_krw)}</span>
+        <button class="inv-card-del" title="삭제">🗑️</button>
+      </div>
+    `;
+    card.querySelector('.inv-card-del').addEventListener('click', (e) => {
+      e.stopPropagation();
+      deleteGear(g.id);
+    });
+    grid.appendChild(card);
+    fadeInEl(card);
+  });
+}
+
+$('#inventorySearch').addEventListener('input', (e) => renderInventoryView(e.target.value));
+
+function deleteGear(gearId) {
+  if (!confirm('이 장비를 마스터 리스트에서 삭제할까요? 모든 팩에서도 제거됩니다.')) return;
+  gears = gears.filter((g) => g.id !== gearId);
+  packs.forEach((p) => {
+    p.items = p.items.filter((i) => i.gear_id !== gearId);
+  });
+  saveData();
+  renderNav();
+  if (currentView === 'inventory') renderInventoryView($('#inventorySearch').value);
+  if (currentView === 'pack') renderPackDetail();
+}
+
+// ============================================
+// 팩 열기 / 생성
+// ============================================
+function openPack(packId) {
+  selectedPackId = packId;
+  showView('pack');
+  renderPackDetail();
+}
+
+function createNewPack() {
+  const today = new Date();
+  const yy = String(today.getFullYear()).slice(2);
+  const mm = String(today.getMonth() + 1).padStart(2, '0');
+  const dd = String(today.getDate()).padStart(2, '0');
+
+  const newPack = {
+    id: crypto.randomUUID(),
+    name: `${yy}${mm}${dd} 새 팩`,
+    items: [],
+    created_at: new Date().toISOString(),
+  };
+
+  packs.push(newPack);
+  saveData();
+  openPack(newPack.id);
+
+  // 이름 바로 편집 가능하도록 포커스 + 전체 선택
+  requestAnimationFrame(() => {
+    const h1 = $('#packName');
+    h1.focus();
+    document.execCommand('selectAll', false, null);
+  });
+}
+
+function deletePack() {
+  if (!confirm('이 팩을 삭제할까요? (마스터 리스트의 장비는 그대로 남아요)')) return;
+  packs = packs.filter((p) => p.id !== selectedPackId);
+  saveData();
+  selectedPackId = null;
+  if (packs.length > 0) {
+    openPack(packs[0].id);
+  } else {
+    openInventory();
+  }
+}
+
+// ============================================
+// 팩 상세 렌더링
+// ============================================
+function renderPackDetail() {
+  const pack = packs.find((p) => p.id === selectedPackId);
+  if (!pack) return;
+
   $('#packName').textContent = pack.name;
 
-  // 팩의 장비 아이템들
   const packItems = pack.items
     .map((item) => {
       const gear = gears.find((g) => g.id === item.gear_id);
@@ -139,79 +228,193 @@ function selectPack(packId) {
     })
     .filter(Boolean);
 
-  // 통계 계산
-  const totalWeight = packItems.reduce((sum, g) => sum + g.weight * g.quantity, 0);
-  const totalPrice = packItems.reduce((sum, g) => sum + g.price_krw * g.quantity, 0);
+  const totalWeight = packItems.reduce((s, g) => s + g.weight * g.quantity, 0);
+  const totalPrice = packItems.reduce((s, g) => s + g.price_krw * g.quantity, 0);
 
   $('#totalWeight').textContent = formatWeight(totalWeight);
   $('#totalPrice').textContent = formatPrice(totalPrice);
   $('#itemCount').textContent = packItems.length;
 
-  // 도넛 차트
   renderChart(packItems);
-
-  // 카테고리별 테이블
-  renderCategoryTables(packItems, pack.id);
-
-  renderPackList();
+  renderSourceList($('#sourceSearch').value);
+  renderDropZone(packItems, pack.id);
 }
 
+// 팩 이름 인라인 편집 저장
+$('#packName').addEventListener('blur', () => {
+  const pack = packs.find((p) => p.id === selectedPackId);
+  if (!pack) return;
+  const newName = $('#packName').textContent.trim() || '(제목 없음)';
+  pack.name = newName;
+  saveData();
+  renderNav();
+});
+$('#packName').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    $('#packName').blur();
+  }
+});
+
 // ============================================
-// 도넛 차트 렌더링
+// 도넛 차트
 // ============================================
 function renderChart(items) {
   const byCategory = {};
   items.forEach((item) => {
-    if (!byCategory[item.category]) byCategory[item.category] = 0;
-    byCategory[item.category] += item.weight * item.quantity;
+    byCategory[item.category] = (byCategory[item.category] || 0) + item.weight * item.quantity;
   });
 
-  const labels = Object.keys(byCategory);
-  const data = Object.values(byCategory);
-
   const ctx = $('#categoryChart').getContext('2d');
-
-  // 기존 차트 제거
   if (window.chartInstance) window.chartInstance.destroy();
+
+  if (Object.keys(byCategory).length === 0) return;
 
   window.chartInstance = new Chart(ctx, {
     type: 'doughnut',
     data: {
-      labels,
+      labels: Object.keys(byCategory),
       datasets: [
         {
-          data,
-          backgroundColor: [
-            '#3b82f6',
-            '#ef4444',
-            '#10b981',
-            '#8b5cf6',
-            '#f59e0b',
-            '#06b6d4',
-            '#f97316',
-            '#6366f1',
-          ],
+          data: Object.values(byCategory),
+          backgroundColor: ['#c2603d', '#4e8c6b', '#6b7fd7', '#c99a2e', '#8b5cf6', '#2f7a6b', '#c1443a', '#8a8578'],
+          borderWidth: 0,
         },
       ],
     },
     options: {
       responsive: true,
       maintainAspectRatio: true,
-      plugins: {
-        legend: {
-          position: 'bottom',
-        },
-      },
+      cutout: '65%',
+      plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 11 } } } },
     },
   });
 }
 
 // ============================================
-// 카테고리별 테이블 렌더링
+// 소스 리스트 (드래그 가능한 마스터 리스트, 팩 화면 좌측)
 // ============================================
-function renderCategoryTables(items, packId) {
-  const container = $('#categoryTables');
+function renderSourceList(filter = '') {
+  const container = $('#sourceList');
   container.innerHTML = '';
+  $('#sourceCountBadge').textContent = gears.length;
+
+  const q = filter.trim().toLowerCase();
+  const visible = gears.filter((g) => g.name.toLowerCase().includes(q));
+
+  if (visible.length === 0) {
+    container.innerHTML = `<p class="empty-note">${gears.length === 0 ? '등록된 장비가 없어요' : '검색 결과 없음'}</p>`;
+    return;
+  }
+
+  const byCategory = {};
+  visible.forEach((g) => {
+    if (!byCategory[g.category]) byCategory[g.category] = [];
+    byCategory[g.category].push(g);
+  });
+
+  Object.entries(byCategory).forEach(([cat, items]) => {
+    const group = document.createElement('div');
+    group.className = 'source-cat-group';
+    group.innerHTML = `<h3>${cat}</h3>`;
+
+    items.forEach((g) => {
+      const item = document.createElement('div');
+      item.className = 'source-item';
+      item.draggable = true;
+      item.dataset.gearId = g.id;
+      item.innerHTML = `
+        <span class="drag-handle">⠿</span>
+        <span class="source-item-name">${escapeHtml(g.name)}</span>
+        <span class="source-item-weight">${formatWeight(g.weight)}</span>
+      `;
+      item.addEventListener('dragstart', (e) => {
+        e.dataTransfer.setData('text/plain', g.id);
+        e.dataTransfer.effectAllowed = 'copy';
+        item.classList.add('dragging');
+      });
+      item.addEventListener('dragend', () => item.classList.remove('dragging'));
+      item.addEventListener('click', () => addGearToPack(selectedPackId, g.id));
+      group.appendChild(item);
+    });
+
+    container.appendChild(group);
+  });
+}
+
+$('#sourceSearch').addEventListener('input', (e) => renderSourceList(e.target.value));
+
+// ============================================
+// 드롭 존 (팩 내용물)
+// ============================================
+const dropZone = $('#dropZone');
+
+dropZone.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'copy';
+  dropZone.classList.add('drag-over');
+});
+dropZone.addEventListener('dragleave', (e) => {
+  if (!dropZone.contains(e.relatedTarget)) dropZone.classList.remove('drag-over');
+});
+dropZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  const gearId = e.dataTransfer.getData('text/plain');
+  if (gearId) addGearToPack(selectedPackId, gearId);
+});
+
+function addGearToPack(packId, gearId) {
+  const pack = packs.find((p) => p.id === packId);
+  if (!pack) return;
+  const existing = pack.items.find((i) => i.gear_id === gearId);
+  if (existing) {
+    existing.quantity += 1;
+  } else {
+    pack.items.push({ gear_id: gearId, quantity: 1 });
+  }
+  saveData();
+  renderPackDetail();
+}
+
+function changeQty(packId, gearId, delta) {
+  const pack = packs.find((p) => p.id === packId);
+  if (!pack) return;
+  const item = pack.items.find((i) => i.gear_id === gearId);
+  if (!item) return;
+  item.quantity += delta;
+  if (item.quantity <= 0) {
+    pack.items = pack.items.filter((i) => i.gear_id !== gearId);
+  }
+  saveData();
+  renderPackDetail();
+}
+
+function removeGearFromPack(packId, gearId) {
+  const pack = packs.find((p) => p.id === packId);
+  if (!pack) return;
+
+  const row = $(`tr[data-gear-id="${gearId}"]`);
+  if (row) {
+    animate(row, { opacity: [1, 0], transform: ['scale(1)', 'scale(0.96)'] }, { duration: 0.16, easing: 'ease-in' }).finished.then(() => {
+      pack.items = pack.items.filter((i) => i.gear_id !== gearId);
+      saveData();
+      renderPackDetail();
+    });
+  } else {
+    pack.items = pack.items.filter((i) => i.gear_id !== gearId);
+    saveData();
+    renderPackDetail();
+  }
+}
+
+function renderDropZone(items, packId) {
+  const container = $('#categoryTables');
+  const emptyMsg = $('#dropZoneEmpty');
+  container.innerHTML = '';
+
+  emptyMsg.hidden = items.length !== 0;
+  if (items.length === 0) return;
 
   const byCategory = {};
   items.forEach((item) => {
@@ -220,119 +423,100 @@ function renderCategoryTables(items, packId) {
   });
 
   Object.entries(byCategory).forEach(([category, categoryItems]) => {
-    const totalCategoryWeight = categoryItems.reduce((s, i) => s + i.weight * i.quantity, 0);
-    const totalCategoryPrice = categoryItems.reduce((s, i) => s + i.price_krw * i.quantity, 0);
+    const totalW = categoryItems.reduce((s, i) => s + i.weight * i.quantity, 0);
+    const totalP = categoryItems.reduce((s, i) => s + i.price_krw * i.quantity, 0);
 
     const section = document.createElement('div');
     section.className = 'category-section';
     section.innerHTML = `
       <div class="category-header">
         <span>${category}</span>
-        <span>${formatWeight(totalCategoryWeight)} | ${formatPrice(totalCategoryPrice)}</span>
+        <span>${formatWeight(totalW)} · ${formatPrice(totalP)}</span>
       </div>
       <table class="category-table">
-        <thead>
-          <tr>
-            <th>상품</th>
-            <th>무게</th>
-            <th>가격</th>
-            <th>수량</th>
-            <th></th>
-          </tr>
-        </thead>
+        <thead><tr><th>상품</th><th>무게</th><th>가격</th><th>수량</th><th></th></tr></thead>
         <tbody>
-          ${categoryItems.map((item) => `
-            <tr>
+          ${categoryItems
+            .map(
+              (item) => `
+            <tr data-gear-id="${item.id}">
               <td class="gear-name">
-                ${item.image ? `<img src="${item.image}" class="gear-thumb">` : '<div class="gear-thumb" style="background: #f0f0f0">🎒</div>'}
+                <div class="gear-thumb">${item.image ? `<img src="${item.image}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">` : '🎒'}</div>
                 <div class="gear-info">
-                  <strong>${item.name}</strong>
-                  ${item.source_url ? `<a href="${item.source_url}" target="_blank" style="font-size: 0.8rem; color: #3b82f6;">보기 →</a>` : ''}
+                  <strong>${escapeHtml(item.name)}</strong>
+                  ${item.source_url ? `<a href="${item.source_url}" target="_blank" rel="noopener">보기 →</a>` : ''}
                 </div>
               </td>
               <td>${formatWeight(item.weight)}</td>
               <td>${formatPrice(item.price_krw)}</td>
-              <td>${item.quantity}</td>
               <td>
-                <button class="icon-btn remove-btn" data-pack-id="${packId}" data-gear-id="${item.id}">🗑️</button>
+                <span class="qty-controls">
+                  <button class="qty-btn" data-action="dec" data-gear-id="${item.id}">−</button>
+                  ${item.quantity}
+                  <button class="qty-btn" data-action="inc" data-gear-id="${item.id}">+</button>
+                </span>
               </td>
+              <td><button class="icon-btn remove-btn" data-gear-id="${item.id}">🗑️</button></td>
             </tr>
-          `).join('')}
+          `
+            )
+            .join('')}
         </tbody>
       </table>
     `;
     container.appendChild(section);
   });
 
-  // 삭제 버튼 이벤트
-  $$('.remove-btn').forEach((btn) => {
+  $$('.qty-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
-      const packId = btn.dataset.packId;
-      const gearId = btn.dataset.gearId;
-      removeGearFromPack(packId, gearId);
+      const delta = btn.dataset.action === 'inc' ? 1 : -1;
+      changeQty(packId, btn.dataset.gearId, delta);
     });
   });
+  $$('.remove-btn').forEach((btn) => {
+    btn.addEventListener('click', () => removeGearFromPack(packId, btn.dataset.gearId));
+  });
+  $$('.category-table tbody tr').forEach((row) => fadeInEl(row));
 }
 
 // ============================================
-// 액션: 팩에서 장비 제거
+// 장비 추가 모달
 // ============================================
-function removeGearFromPack(packId, gearId) {
-  const pack = packs.find((p) => p.id === packId);
-  if (!pack) return;
-
-  pack.items = pack.items.filter((item) => item.gear_id !== gearId);
-  saveData();
-  selectPack(packId);
-}
-
-// ============================================
-// 액션: 새 팩 생성
-// ============================================
-async function createNewPack() {
-  const name = prompt('팩 이름을 입력하세요:');
-  if (!name) return;
-
-  const newPack = {
-    id: crypto.randomUUID(),
-    name,
-    items: [],
-    created_at: new Date().toISOString(),
-  };
-
-  packs.push(newPack);
-  saveData();
-  selectPack(newPack.id);
-  renderPackList();
-}
-
-// ============================================
-// 액션: 장비 추가 (모달)
-// ============================================
-async function openAddGearModal() {
+function openAddGearModal() {
   $('#addGearModal').hidden = false;
+  const modal = $('.modal-content');
+  animate(modal, { opacity: [0, 1], transform: ['scale(0.96)', 'scale(1)'] }, { duration: 0.18, easing: 'ease-out' });
 }
 
 function closeAddGearModal() {
   $('#addGearModal').hidden = true;
   $('#addGearForm').reset();
+  $('#autoFillHint').textContent = '';
+  autoFillImage = null;
 }
 
-// ============================================
-// 이벤트 리스너
-// ============================================
+let autoFillImage = null;
 
-// 새 팩 버튼
+$('#showInventoryBtn').addEventListener('click', openInventory);
 $('#newPackBtn').addEventListener('click', createNewPack);
-
-// 장비 추가 버튼
-$('#addGearBtn').addEventListener('click', openAddGearModal);
-
-// 모달 닫기
+$('#welcomeNewPackBtn').addEventListener('click', createNewPack);
+$('#addGearBtnMain').addEventListener('click', openAddGearModal);
+$('#addGearBtnPack').addEventListener('click', openAddGearModal);
+$('#welcomeAddGearBtn').addEventListener('click', openAddGearModal);
 $('#closeModalBtn').addEventListener('click', closeAddGearModal);
 $('#cancelBtn').addEventListener('click', closeAddGearModal);
+$('#deletePackBtn').addEventListener('click', deletePack);
 
-// 자동 채우기 버튼
+$('#resetDataBtn').addEventListener('click', () => {
+  if (!confirm('모든 장비와 팩 데이터를 삭제할까요? 되돌릴 수 없어요.')) return;
+  localStorage.removeItem(STORAGE.GEARS);
+  localStorage.removeItem(STORAGE.PACKS);
+  gears = [];
+  packs = [];
+  selectedPackId = null;
+  showView('welcome');
+});
+
 $('#autoFillBtn').addEventListener('click', async () => {
   const url = $('#linkInput').value;
   if (!url) {
@@ -350,22 +534,18 @@ $('#autoFillBtn').addEventListener('click', async () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url }),
     });
-
     const data = await res.json();
-
     if (!res.ok) throw new Error(data.error);
 
     $('#nameInput').value = data.name || '';
     if (data.weight && data.weight.grams) $('#weightInput').value = data.weight.grams;
-    if (data.price && data.price.amount) {
-      // 가격은 자동으로 한화(KRW)로 변환되어 들어옴
-      $('#priceInput').value = data.price.amount;
-    }
+    if (data.price && data.price.amount) $('#priceInput').value = data.price.amount;
+    autoFillImage = data.image || null;
 
-    $('#autoFillHint').textContent = '✅ 정보를 가져왔습니다.';
+    $('#autoFillHint').textContent = '정보를 가져왔어요. 무게/가격을 다시 한 번 확인해주세요.';
     $('#autoFillHint').className = 'hint success';
   } catch (err) {
-    $('#autoFillHint').textContent = `❌ ${err.message}`;
+    $('#autoFillHint').textContent = `${err.message} — 이름/무게/가격을 직접 입력해주세요. (네이버 스마트스토어 등 일부 사이트는 로그인 벽 때문에 자동 인식이 안 될 수 있어요)`;
     $('#autoFillHint').className = 'hint error';
   } finally {
     $('#autoFillBtn').textContent = '자동 채우기';
@@ -373,7 +553,6 @@ $('#autoFillBtn').addEventListener('click', async () => {
   }
 });
 
-// 장비 추가 폼 제출
 $('#addGearForm').addEventListener('submit', (e) => {
   e.preventDefault();
 
@@ -384,36 +563,39 @@ $('#addGearForm').addEventListener('submit', (e) => {
     weight: Number($('#weightInput').value),
     price_krw: Number($('#priceInput').value),
     source_url: $('#linkInput').value || null,
-    image: null, // TODO: 자동 채우기에서 이미지 저장
+    image: autoFillImage,
     created_at: new Date().toISOString(),
   };
 
   gears.push(newGear);
   saveData();
   closeAddGearModal();
-  renderGearList();
 
-  // 현재 팩이 선택되어 있으면 자동으로 추가
-  if (selectedPackId) {
-    const pack = packs.find((p) => p.id === selectedPackId);
-    if (pack) {
-      pack.items.push({ gear_id: newGear.id, quantity: 1 });
-      saveData();
-      selectPack(selectedPackId);
-    }
+  if (currentView === 'pack' && selectedPackId) {
+    addGearToPack(selectedPackId, newGear.id);
+  } else {
+    openInventory();
   }
+  renderNav();
 });
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
 
 // ============================================
 // 초기화
 // ============================================
-document.addEventListener('DOMContentLoaded', () => {
-  loadData();
-  loadRates();
-  renderGearList();
-  renderPackList();
+loadData();
+loadRates();
+renderNav();
 
-  if (packs.length > 0) {
-    selectPack(packs[0].id);
-  }
-});
+if (gears.length === 0 && packs.length === 0) {
+  showView('welcome');
+} else if (packs.length > 0) {
+  openPack(packs.slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0].id);
+} else {
+  openInventory();
+}

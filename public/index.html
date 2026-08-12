@@ -8,62 +8,73 @@
 </head>
 <body>
   <div class="app">
-    <!-- 좌측 사이드바: 리스트 관리 -->
-    <aside class="sidebar">
-      <header class="sidebar-header">
-        <h1>PackPack</h1>
-        <p class="tagline">그램 단위로 여행을 준비한다</p>
-      </header>
+    <!-- 좌측 슬림 사이드바 (Claude 앱 스타일 네비게이션) -->
+    <aside class="nav">
+      <div class="nav-brand">
+        <span class="nav-mark">🏕️</span>
+        <span class="nav-title">PackPack</span>
+      </div>
 
-      <section class="sidebar-section">
-        <h2>
-          마스터 리스트
-          <span id="gearCountBadge" class="badge">0</span>
-        </h2>
-        <div class="sidebar-actions">
-          <button id="addGearBtn" class="btn-small primary">+ 장비 추가</button>
-          <button id="searchGearBtn" class="btn-small">🔍 검색</button>
-        </div>
-        <ul id="gearList" class="gear-master-list"></ul>
-      </section>
+      <button id="newPackBtn" class="nav-new-btn">
+        <span class="plus">+</span> 새 팩
+      </button>
 
-      <section class="sidebar-section">
-        <h2>
-          내 팩
-          <span id="packCountBadge" class="badge">0</span>
-        </h2>
-        <button id="newPackBtn" class="btn-small primary">+ 새 팩</button>
-        <ul id="packList" class="pack-list"></ul>
-      </section>
+      <button id="showInventoryBtn" class="nav-item nav-item--inventory">
+        <span class="nav-icon">🎒</span>
+        마스터 리스트
+        <span id="gearCountBadge" class="nav-badge">0</span>
+      </button>
 
-      <footer class="sidebar-footer">
-        <p class="rate-info">
-          기준환율<br />
-          <span id="rateDisplay">로딩 중...</span>
-        </p>
-      </footer>
+      <div class="nav-section-label">내 팩</div>
+      <ul id="packList" class="nav-pack-list"></ul>
+
+      <div class="nav-footer">
+        <span id="rateDisplay" class="nav-rate">환율 로딩 중...</span>
+        <button id="resetDataBtn" class="nav-reset" title="모든 데이터 초기화">초기화</button>
+      </div>
     </aside>
 
-    <!-- 중앙 메인: 팩 상세 / 추가 폼 -->
-    <main class="main-content">
-      <!-- 팩이 선택되지 않았을 때 -->
-      <section id="emptyState" class="empty-state">
-        <h2>팩을 선택해주세요</h2>
-        <p>좌측에서 기존 팩을 선택하거나 새 팩을 만들어보세요.</p>
+    <!-- 메인 콘텐츠 -->
+    <main class="main">
+      <!-- 시작 화면 -->
+      <section id="welcomeView" class="view welcome-view">
+        <div class="welcome-card">
+          <span class="welcome-mark">🏕️</span>
+          <h1>그램 단위로 여행을 준비하세요</h1>
+          <p>먼저 <strong>마스터 리스트</strong>에 소유한 장비를 등록하고, 여행마다 <strong>팩</strong>을 만들어 필요한 장비를 끌어다 놓으세요.</p>
+          <div class="welcome-actions">
+            <button id="welcomeAddGearBtn" class="btn primary">장비 등록하기</button>
+            <button id="welcomeNewPackBtn" class="btn secondary">새 팩 만들기</button>
+          </div>
+        </div>
       </section>
 
-      <!-- 팩 상세 화면 (선택되었을 때) -->
-      <section id="packDetail" class="pack-detail" hidden>
-        <header class="pack-header">
-          <h2 id="packName"></h2>
+      <!-- 마스터 리스트 전용 화면 (팩 미선택) -->
+      <section id="inventoryView" class="view inventory-view" hidden>
+        <header class="view-header">
+          <div>
+            <h1>마스터 리스트</h1>
+            <p class="view-subtitle">소유한 모든 장비. 팩을 만들면 여기서 끌어다 놓을 수 있어요.</p>
+          </div>
+          <button id="addGearBtnMain" class="btn primary">+ 장비 추가</button>
+        </header>
+        <input id="inventorySearch" class="search-input" type="search" placeholder="장비 검색..." />
+        <div id="inventoryGrid" class="inventory-grid"></div>
+      </section>
+
+      <!-- 팩 상세 화면 (분할 뷰: 마스터 리스트 | 팩) -->
+      <section id="packView" class="view pack-view" hidden>
+        <header class="view-header">
+          <div class="pack-title-group">
+            <h1 id="packName" contenteditable="true" spellcheck="false"></h1>
+            <p class="view-subtitle">왼쪽 장비를 오른쪽으로 끌어다 놓으세요</p>
+          </div>
           <div class="pack-actions">
-            <button id="shareBtn" class="btn-small">📤 공유</button>
-            <button id="settingsBtn" class="btn-small">⚙️ 설정</button>
-            <button id="deletePackBtn" class="btn-small danger">🗑️ 삭제</button>
+            <button id="addGearBtnPack" class="btn-icon" title="새 장비 등록">+ 장비</button>
+            <button id="deletePackBtn" class="btn-icon danger" title="팩 삭제">삭제</button>
           </div>
         </header>
 
-        <!-- 도넛 차트 + 통계 -->
         <section class="pack-summary">
           <div class="chart-container">
             <canvas id="categoryChart"></canvas>
@@ -84,10 +95,23 @@
           </div>
         </section>
 
-        <!-- 카테고리별 테이블 -->
-        <section class="pack-items">
-          <div id="categoryTables"></div>
-        </section>
+        <div class="split">
+          <!-- 왼쪽: 드래그 소스 (마스터 리스트) -->
+          <div class="split-pane split-pane--source">
+            <h2>내 장비<span id="sourceCountBadge" class="nav-badge"></span></h2>
+            <input id="sourceSearch" class="search-input search-input--small" type="search" placeholder="검색..." />
+            <div id="sourceList" class="source-list"></div>
+          </div>
+
+          <!-- 오른쪽: 드롭 타겟 (팩 내용물) -->
+          <div class="split-pane split-pane--target">
+            <h2>이 팩의 장비</h2>
+            <div id="dropZone" class="drop-zone">
+              <div id="dropZoneEmpty" class="drop-zone-empty">왼쪽에서 장비를 끌어다 놓으세요</div>
+              <div id="categoryTables"></div>
+            </div>
+          </div>
+        </div>
       </section>
 
       <!-- 장비 추가 모달 -->
@@ -132,7 +156,7 @@
               </div>
               <div class="form-row">
                 <label for="priceInput">가격 (₩) *</label>
-                <input type="number" id="priceInput" required min="0" step="100" placeholder="999770" />
+                <input type="number" id="priceInput" required min="0" step="1" placeholder="999770" />
               </div>
             </div>
 
@@ -148,6 +172,6 @@
 
   <!-- Chart.js for donut chart -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="script.js"></script>
+  <script type="module" src="script.js"></script>
 </body>
 </html>

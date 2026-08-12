@@ -12,6 +12,7 @@
     "cheerio": "^1.0.0",
     "cors": "^2.8.5",
     "express": "^4.19.2",
+    "motion": "^13.1.0",
     "puppeteer": "^25.6.0"
   },
   "engines": {

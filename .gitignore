@@ -2,3 +2,7 @@ node_modules/
 .env
 *.log
 .claude/settings.local.json
+
+# 스킬 원본은 .agents/skills/ 에만 저장. .claude/skills/ 는 그 심볼릭 링크라
+# 이 환경 git이 심볼릭 링크를 실제 파일로 복사해버려서 중복 방지 차 제외.
+.claude/skills/
