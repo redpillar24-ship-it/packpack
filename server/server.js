@@ -7,7 +7,7 @@
 const path = require('path');
 const express = require('express');
 const cors = require('cors');
-const { extractProductInfo } = require('./extractor');
+const { extractProductInfo, MAX_REASONABLE_PRICE } = require('./extractor');
 const { extractFromDynamicSite } = require('./extractor-dynamic');
 const { getRates } = require('./rates');
 
@@ -83,12 +83,24 @@ app.post('/api/extract', async (req, res) => {
 
     // 가격을 한화(KRW)로 통일 (환율 이용)
     if (info.price && info.price.currency !== 'KRW') {
-      const rates = await getRates();
-      if (rates && rates.rates[info.price.currency]) {
-        const originalAmount = Number(info.price.amount);
-        const krwAmount = Math.round((originalAmount / rates.rates[info.price.currency]) * rates.rates['KRW']);
+      const originalAmount = Number(info.price.amount);
+      const claimedMax = MAX_REASONABLE_PRICE[info.price.currency];
+      // 일부 사이트는 지역별로 이미 원화로 자동환산된 가격을 원래 통화 라벨(예: USD)인 채로 내려줌
+      // (zpacks.com에서 실측 확인). 그 상태로 다시 환산하면 실제 가격의 몇백~몇천 배로 틀어지므로,
+      // 원래 통화 기준으로는 비정상적으로 크면서 원화 기준으로는 합리적인 범위면 이미 원화라고 보고
+      // 그대로 사용한다 (재환산하지 않음).
+      const looksAlreadyKrw = claimedMax && originalAmount > claimedMax && originalAmount <= MAX_REASONABLE_PRICE.KRW;
+
+      if (looksAlreadyKrw) {
         info.price_original = { amount: info.price.amount, currency: info.price.currency };
-        info.price = { amount: String(krwAmount), currency: 'KRW', confidence: 'low' }; // 환산이라 신뢰도 낮춤
+        info.price = { amount: info.price.amount, currency: 'KRW', confidence: 'low' };
+      } else {
+        const rates = await getRates();
+        if (rates && rates.rates[info.price.currency]) {
+          const krwAmount = Math.round((originalAmount / rates.rates[info.price.currency]) * rates.rates['KRW']);
+          info.price_original = { amount: info.price.amount, currency: info.price.currency };
+          info.price = { amount: String(krwAmount), currency: 'KRW', confidence: 'low' }; // 환산이라 신뢰도 낮춤
+        }
       }
     }
 
