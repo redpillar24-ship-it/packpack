@@ -111,7 +111,7 @@ function fadeInEl(el) {
 // ============================================
 async function loadRates() {
   try {
-    const res = await fetch('/api/rates');
+    const res = await fetch((window.PACKPACK_API_BASE || '') + '/api/rates');
     if (res.ok) {
       rates = await res.json();
       $('#rateDisplay').textContent = `기준환율 USD→KRW ${rates.rates.KRW.toFixed(0)} (${rates.date})`;
@@ -698,7 +698,7 @@ async function runAutoFill() {
   hint.className = 'hint';
 
   try {
-    const res = await fetch('/api/extract', {
+    const res = await fetch((window.PACKPACK_API_BASE || '') + '/api/extract', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url }),
